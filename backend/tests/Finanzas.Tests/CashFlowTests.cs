@@ -27,7 +27,7 @@ public class CashFlowTests
 
     static Transaction Tx(Operation op, DateOnly date, long amount, PaymentMethod method, TransactionStatus status = TransactionStatus.Realizado, int n = 1, DateOnly? due = null, int? paidCard = null)
     {
-        var t = new Transaction { Operation = op, Date = date, Amount = amount, PaymentMethodId = method.Id, Installments = n, Status = status, Description = "x", PaidCardId = paidCard };
+        var t = new Transaction { Scope = method.CashBoxId == 2 ? Scope.Memey : Scope.Familia, Operation = op, Date = date, Amount = amount, PaymentMethodId = method.Id, Installments = n, Status = status, Description = "x", PaidCardId = paidCard };
         t.FirstDueDate = due ?? (method.IsCard && op != Operation.PagoTarjeta ? CardCalendar.ProposeDueDate(method.Cycles, date) : null);
         t.Impacts = CashImpactBuilder.Build(t, method, BoxOf);
         return t;

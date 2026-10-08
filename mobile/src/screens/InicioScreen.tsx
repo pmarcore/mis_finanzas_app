@@ -9,7 +9,7 @@ import { Screen } from '../components/Screen';
 import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
 import { scopeColor, spacing, useTheme } from '../theme';
-import { formatDate, formatMonth } from '../utils/format';
+import { formatARS, formatDate, formatMonth } from '../utils/format';
 
 export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
   const { scope, cutoff } = useScope();
@@ -51,12 +51,22 @@ export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
             </Card>
 
             <Card title="Proyección trimestral" accent={accent}>
-              {d.quarter.map((m) => (
-                <View key={m.month} style={styles.line}>
-                  <Text style={{ color: colors.ink }}>{formatMonth(m.month)}</Text>
-                  <MoneyText value={m.balance} size="sm" />
-                </View>
-              ))}
+              {d.quarter.map((m) => {
+                const spend = d.estimatedMonthlySpend.find((e) => e.month === m.month);
+                return (
+                  <View key={m.month} style={styles.line}>
+                    <View style={{ flexShrink: 1 }}>
+                      <Text style={{ color: colors.ink }}>{formatMonth(m.month)}</Text>
+                      {spend && (
+                        <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
+                          Gasto estimado familia {formatARS(spend.amount)}
+                        </Text>
+                      )}
+                    </View>
+                    <MoneyText value={m.balance} size="sm" />
+                  </View>
+                );
+              })}
             </Card>
 
             <Card title="Caja Memey" accent={colors.memey}>
@@ -86,7 +96,11 @@ export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
                   <View key={p.dueDate} style={styles.line}>
                     <View style={{ flexShrink: 1 }}>
                       <Text style={{ color: colors.ink }}>{formatDate(p.dueDate)}</Text>
-                      <Text style={{ color: colors.inkMuted, fontSize: 12 }}>{p.cards.join(', ')}</Text>
+                      <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
+                        {p.byCard.length > 0
+                          ? p.byCard.map((c) => `${c.card} ${formatARS(c.total)}`).join(' · ')
+                          : p.cards.join(', ')}
+                      </Text>
                     </View>
                     <MoneyText value={p.total} size="sm" />
                   </View>

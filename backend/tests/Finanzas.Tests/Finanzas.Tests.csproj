@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -22,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Finanzas.Domain\Finanzas.Domain.csproj" />
     <ProjectReference Include="..\..\src\Finanzas.Infrastructure\Finanzas.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Finanzas.Api\Finanzas.Api.csproj" />
   </ItemGroup>
 
 </Project>

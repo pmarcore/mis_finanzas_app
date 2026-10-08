@@ -61,10 +61,16 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   }
 
   if (!res.ok) {
-    const message =
-      (data && typeof data === 'object' && 'title' in data && typeof data.title === 'string'
-        ? data.title
-        : undefined) ?? `Error ${res.status} en ${path}`;
+    // El backend responde los 400/404 con un string en español (Results.BadRequest("...")),
+    // o con ProblemDetails ({ title, detail }) en errores del framework.
+    let message: string | undefined;
+    if (typeof data === 'string' && data.trim()) message = data;
+    else if (data && typeof data === 'object') {
+      const o = data as { detail?: unknown; title?: unknown };
+      if (typeof o.detail === 'string') message = o.detail;
+      else if (typeof o.title === 'string') message = o.title;
+    }
+    message ??= `Error ${res.status} en ${path}`;
     throw new ApiError(res.status, message, data);
   }
   return data as T;
@@ -75,4 +81,5 @@ export const api = {
     request<T>(path, { query, signal }),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
+  delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
 };

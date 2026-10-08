@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useCardCycles, usePaymentMethods } from '../api/endpoints';
+import type { Id } from '../api/types';
 import { Card } from '../components/Card';
 import { ChipPicker } from '../components/ChipPicker';
 import { QueryState } from '../components/QueryState';
@@ -12,8 +13,8 @@ import { formatDate, formatMonth } from '../utils/format';
 export function TarjetasScreen({ navigation }: RootStackScreenProps<'Tarjetas'>) {
   const { colors } = useTheme();
   const methods = usePaymentMethods();
-  const cards = (methods.data ?? []).filter((m) => m.type === 'tarjeta');
-  const [cardId, setCardId] = useState<string>();
+  const cards = (methods.data ?? []).filter((m) => m.isCard);
+  const [cardId, setCardId] = useState<Id>();
   const selected = cardId ?? cards[0]?.id;
   const cycles = useCardCycles(selected);
 
