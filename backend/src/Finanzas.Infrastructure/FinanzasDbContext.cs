@@ -36,6 +36,7 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
         b.Entity<RecurringRule>().HasMany(x => x.Amounts).WithOne().HasForeignKey(a => a.RecurringRuleId).OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<Budget>().HasIndex(x => new { x.Month, x.CategoryId }).IsUnique();
+        b.Entity<Category>().HasIndex(x => new { x.Scope, x.Name }).IsUnique();
 
         // Datos fijos de arranque, tomados de la planilla "Finanzas familiares y Memey".
         b.Entity<Person>().HasData(

@@ -4,7 +4,8 @@ App para manejar la caja familiar y la de Memey: caja actual, proyección a fin 
 
 - `backend/`: API en .NET 10 con SQLite (EF Core). Calcula todo.
 - `mobile/`: app React Native con Expo. Muestra y carga datos.
-- `docs/arquitectura.md`: diagrama y reglas de negocio.
+- `docs/arquitectura.md`: diagrama, reglas de negocio y endpoints.
+- `data/import/`: foto de octubre de la planilla, lista para importar.
 
 ## Backend
 
@@ -17,7 +18,7 @@ dotnet test
 dotnet run --project src/Finanzas.Api   # http://localhost:5080
 ```
 
-La base `finanzas.db` se crea sola al arrancar (migraciones de EF Core). Para una migración nueva:
+La base `finanzas.db` se crea sola al arrancar (migraciones de EF Core). Para cargar octubre desde la planilla, ver `data/import/README.md`. Para una migración nueva:
 
 ```bash
 dotnet ef migrations add <Nombre> -p src/Finanzas.Infrastructure -s src/Finanzas.Api -o Migrations
@@ -36,4 +37,4 @@ npx expo start
 
 ## Estado
 
-Proyecto inicializado: modelo de datos, motor de caja con tests y endpoints base. Siguiente paso: completar endpoints de gastos fijos, presupuesto y reporte, y conectar las pantallas.
+API con dashboard, movimientos, tarjetas, gastos fijos, presupuesto, reporte presupuestado vs real e importación de la planilla. Octubre importado y comparado contra la planilla en los tests.

@@ -46,7 +46,7 @@ public class PaymentMethod
     public int Id { get; set; }
     public required string Name { get; set; }
     public PaymentMethodType Type { get; set; }
-    /// <summary>Caja de la que sale la plata (para tarjeta: la caja que paga el resumen).</summary>
+    /// <summary>Caja habitual del medio. El impacto real va a la caja del ámbito del movimiento.</summary>
     public int CashBoxId { get; set; }
     public long OpeningCardDebt { get; set; }
     public List<CardCycle> Cycles { get; set; } = [];

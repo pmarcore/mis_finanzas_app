@@ -25,8 +25,9 @@ public static class CashImpactBuilder
     };
 
     /// <summary>
-    /// Genera los impactos en caja de un movimiento. Con tarjeta devuelve líneas de resumen (CardId informado),
-    /// que la proyección agrupa por tarjeta y vencimiento.
+    /// Genera los impactos en caja de un movimiento. La caja es la del ámbito del movimiento (como en la planilla:
+    /// un gasto familiar pagado desde Memey MP sale de la caja familiar). Con tarjeta devuelve líneas de resumen
+    /// (CardId informado), que la proyección agrupa por tarjeta y vencimiento.
     /// </summary>
     public static List<CashImpact> Build(Transaction tx, PaymentMethod method, Func<Scope, int> cashBoxOf)
     {
@@ -42,7 +43,7 @@ public static class CashImpactBuilder
 
         var sign = SignOf(tx.Operation);
         if (!method.IsCard)
-            return [new CashImpact { CashBoxId = method.CashBoxId, ImpactDate = tx.Date, Amount = sign * tx.Amount }];
+            return [new CashImpact { CashBoxId = cashBoxOf(tx.Scope), ImpactDate = tx.Date, Amount = sign * tx.Amount }];
 
         if (tx.FirstDueDate is not { } firstDue)
             throw new InvalidOperationException("Con tarjeta, el primer vencimiento es obligatorio.");
@@ -52,7 +53,7 @@ public static class CashImpactBuilder
         var remainder = tx.Amount - installment * n;
         return Enumerable.Range(0, n).Select(i => new CashImpact
         {
-            CashBoxId = method.CashBoxId,
+            CashBoxId = cashBoxOf(tx.Scope),
             CardId = method.Id,
             ImpactDate = firstDue.AddMonths(i),
             Amount = sign * (installment + (i == 0 ? remainder : 0)),
@@ -68,10 +69,11 @@ public static class RecurringRuleExpander
         rule.Amounts.Where(a => a.FromMonth <= month).OrderByDescending(a => a.FromMonth).Select(a => a.Amount).FirstOrDefault();
 
     /// <summary>Previstos de la regla desde su inicio hasta untilMonth (por defecto, diciembre del año en curso).</summary>
-    public static IEnumerable<Transaction> Expand(RecurringRule rule, PaymentMethod method, DateOnly untilMonth)
+    public static IEnumerable<Transaction> Expand(RecurringRule rule, PaymentMethod method, DateOnly untilMonth, DateOnly? fromMonth = null)
     {
         var end = rule.EndMonth is { } e && e < untilMonth ? e : untilMonth;
-        for (var m = new DateOnly(rule.StartMonth.Year, rule.StartMonth.Month, 1); m <= end; m = m.AddMonths(1))
+        var start = fromMonth is { } f && f > rule.StartMonth ? f : rule.StartMonth;
+        for (var m = new DateOnly(start.Year, start.Month, 1); m <= end; m = m.AddMonths(1))
         {
             var day = Math.Min(rule.DayOfMonth, DateTime.DaysInMonth(m.Year, m.Month));
             var date = new DateOnly(m.Year, m.Month, day);
@@ -97,7 +99,8 @@ public static class RecurringRuleExpander
 public class CashFlowCalculator(
     IReadOnlyList<CashBox> boxes,
     IReadOnlyList<Transaction> transactions,
-    IReadOnlyList<Statement> statements)
+    IReadOnlyList<Statement> statements,
+    IReadOnlyList<BudgetEstimate>? estimates = null)
 {
     IEnumerable<CashBox> Boxes(Scope? scope) => boxes.Where(b => scope is null || b.Scope == scope);
 
@@ -128,8 +131,15 @@ public class CashFlowCalculator(
             .Where(x => !(x.Tx.Operation == Operation.PagoTarjeta && x.Tx.Status == TransactionStatus.Previsto))
             .Sum(x => x.Impact.Amount);
 
-        return CashAt(scope, cutoff) + direct - CardOutstanding(impacts, cutoff, until).Sum(s => s.Outstanding);
+        var estimated = (estimates ?? []).Where(e => (scope is null || e.Scope == scope) && e.Date > cutoff && e.Date <= until).Sum(e => e.Amount);
+
+        return CashAt(scope, cutoff) + direct - CardOutstanding(impacts, cutoff, until).Sum(s => s.Outstanding) - estimated;
     }
+
+    /// <summary>Cuotas de compras con tarjeta ya hechas que vencen después de 'after': plata comprometida que todavía no salió.</summary>
+    public long CommittedCardInstallmentsAfter(Scope? scope, DateOnly after) =>
+        -Impacts(scope).Where(x => x.Impact.CardId is not null && x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate > after)
+                       .Sum(x => x.Impact.Amount);
 
     public IEnumerable<(int CardId, DateOnly DueDate, long Expected, long Outstanding)> CardStatements(Scope? scope, DateOnly cutoff, DateOnly until) =>
         CardOutstanding(Impacts(scope).ToList(), cutoff, until);
