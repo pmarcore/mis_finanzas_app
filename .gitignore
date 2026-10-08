@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+*.user
+.vs/
+TestResults/
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+.env
+.env.local
+
+# OS
+.DS_Store
