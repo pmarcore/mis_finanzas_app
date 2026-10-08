@@ -67,3 +67,27 @@ export function addMonths(m: Month, n: number): Month {
 export function formatPct(p: number): string {
   return `${Math.round(p)} %`;
 }
+
+/** 'YYYY-MM' → último día del mes 'YYYY-MM-DD'. */
+export function endOfMonth(m: Month): ISODate {
+  const [y, mm] = m.split('-').map(Number);
+  const d = new Date(y, mm ?? 1, 0);
+  return toISODate(d);
+}
+
+export function isValidMonth(s: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+}
+
+/** Interpreta montos escritos a la argentina: "1.234,50" → 1234.5. null si está vacío o no es número. */
+export function parseAmount(text: string): number | null {
+  const clean = text.replace(/[$\s.]/g, '').replace(',', '.');
+  if (!clean) return null;
+  const n = Number(clean);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+/** 1234.5 → "1234,5" para precargar inputs editables. */
+export function amountToInput(n: number | null | undefined): string {
+  return n === null || n === undefined ? '' : String(n).replace('.', ',');
+}

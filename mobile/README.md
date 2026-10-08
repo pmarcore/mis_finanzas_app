@@ -51,9 +51,25 @@ mobile/
     └── theme.ts             # colores claro/oscuro
 ```
 
+## Contrato con el backend
+
+La fuente de verdad es `backend/src/Finanzas.Api/Endpoints.cs` y `Dtos.cs`; `src/api/types.ts` es su espejo.
+
+- JSON en camelCase; ids numéricos; enums como strings camelCase:
+  - `scope`: `familia` | `memey` (el query param también acepta `total` = ambos).
+  - `operation`: `ingreso` | `gasto` | `pagoTarjeta` | `cuotaAuto` | `ahorro` | `aporteAMemey` | `retiroDeMemey`. Las etiquetas para mostrar están en `OPERATION_LABELS`.
+  - `status`: `realizado` | `previsto`; tipo de medio de pago: `debito` | `efectivo` | `billetera` | `tarjeta`.
+  - Categorías: `kind` `ingreso` | `gasto`; `budgetType` `fijo` | `variable` | `deuda`.
+- Compra con tarjeta: `firstDueDate` es opcional (el backend lo propone con los cierres; si falta el cierre responde 400 con un mensaje).
+- `pagoTarjeta`: requiere `paidCardId` y `firstDueDate` (vencimiento que se paga).
+- `POST/PUT /recurring-rules` devuelven `{ rule, missingCycles }`; la app avisa si faltan cierres.
+- `GET /reports/budget-vs-actual` devuelve `{ rows, totalBudget, totalActual, totalProjected, ... }` con una `alert` por fila.
+- `PUT /settings` guarda piso de caja, meta de ahorro y umbrales de alerta; cada caja se guarda con `PUT /settings/cash-boxes/{id}`.
+- Los errores 400/404 del backend son strings en español: el cliente los muestra tal cual (`ApiError.message`).
+
 ## Convenciones
 
-- Montos en pesos (`number`), fechas `AAAA-MM-DD`, meses `AAAA-MM`.
+- Montos en pesos (`number`, hasta 2 decimales), fechas `AAAA-MM-DD`, meses `AAAA-MM`.
 - Texto de la interfaz en español (Argentina).
 - Agregar dependencias con `npx expo install <paquete>` para que las versiones coincidan con el SDK.
 - No duplicar cálculos del backend en el cliente.

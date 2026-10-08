@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useBudgets, useCategories, useUpdateBudgets } from '../api/endpoints';
-import type { Budget, Month } from '../api/types';
+import type { Budget, Id, Month } from '../api/types';
 import { Card } from '../components/Card';
 import { Input } from '../components/Field';
 import { MonthStepper } from '../components/MonthStepper';
@@ -10,7 +10,7 @@ import { Screen } from '../components/Screen';
 import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
 import { radius, spacing, useTheme } from '../theme';
-import { monthOf } from '../utils/format';
+import { amountToInput, monthOf, parseAmount } from '../utils/format';
 
 export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>) {
   const { cutoff } = useScope();
@@ -21,19 +21,26 @@ export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>)
   const save = useUpdateBudgets(month);
 
   // Borrador editable: categoryId → texto del monto.
-  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState<Record<Id, string>>({});
   useEffect(() => {
-    setDraft(Object.fromEntries((q.data ?? []).map((b) => [b.categoryId, String(b.amount)])));
+    setDraft(Object.fromEntries((q.data ?? []).map((b) => [b.categoryId, amountToInput(b.amount)])));
   }, [q.data]);
 
-  const categoryName = (id: string) => categories.data?.find((c) => c.id === id)?.name ?? id;
+  // Todas las categorías de gasto (para poder presupuestar un mes vacío) más las que ya tengan monto.
+  const rows = useMemo(() => {
+    const all = categories.data ?? [];
+    const ids = new Set(all.filter((c) => c.kind === 'gasto').map((c) => c.id));
+    (q.data ?? []).forEach((b) => ids.add(b.categoryId));
+    return [...ids].map((id) => {
+      const c = all.find((x) => x.id === id);
+      return { id, name: c ? (c.scope === 'memey' ? `${c.name} (Memey)` : c.name) : `#${id}`, scope: c?.scope };
+    });
+  }, [categories.data, q.data]);
 
   const onSave = () => {
-    const budgets: Budget[] = Object.entries(draft).map(([categoryId, text]) => ({
-      month,
-      categoryId,
-      amount: Number(text.replace(/\./g, '').replace(',', '.')) || 0,
-    }));
+    const budgets: Budget[] = Object.entries(draft)
+      .map(([categoryId, text]) => ({ month, categoryId: Number(categoryId), amount: parseAmount(text) ?? 0 }))
+      .filter((b) => b.amount > 0);
     save.mutate(budgets);
   };
 
@@ -41,20 +48,21 @@ export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>)
     <Screen refreshing={q.isRefetching} onRefresh={q.refetch}>
       <MonthStepper value={month} onChange={setMonth} />
       <QueryState
-        isLoading={q.isLoading}
-        error={q.error}
+        isLoading={q.isLoading || categories.isLoading}
+        error={q.error ?? categories.error}
         onRetry={q.refetch}
-        isEmpty={q.data?.length === 0}
-        emptyText="No hay presupuesto para este mes."
+        isEmpty={rows.length === 0}
+        emptyText="No hay categorías de gasto."
       >
         <Card>
-          {(q.data ?? []).map((b) => (
-            <View key={b.categoryId} style={styles.line}>
-              <Text style={{ color: colors.ink, flex: 1 }}>{categoryName(b.categoryId)}</Text>
+          {rows.map((r) => (
+            <View key={r.id} style={styles.line}>
+              <Text style={{ color: r.scope === 'memey' ? colors.memey : colors.ink, flex: 1 }}>{r.name}</Text>
               <Input
-                value={draft[b.categoryId] ?? ''}
-                onChangeText={(t) => setDraft((d) => ({ ...d, [b.categoryId]: t }))}
-                keyboardType="number-pad"
+                value={draft[r.id] ?? ''}
+                onChangeText={(t) => setDraft((d) => ({ ...d, [r.id]: t }))}
+                placeholder="0"
+                keyboardType="decimal-pad"
                 style={styles.amount}
               />
             </View>
@@ -68,6 +76,7 @@ export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>)
           <Text style={{ color: colors.surface, fontWeight: '700' }}>Guardar presupuesto</Text>
         </Pressable>
         {save.error && <Text style={{ color: colors.bad }}>{save.error.message}</Text>}
+        {save.isSuccess && <Text style={{ color: colors.good }}>Presupuesto guardado.</Text>}
       </QueryState>
       <Pressable onPress={() => navigation.navigate('Reporte', { month })} style={styles.link}>
         <Text style={{ color: colors.familia, fontWeight: '600' }}>Ver presupuesto vs. real →</Text>

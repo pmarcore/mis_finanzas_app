@@ -1,11 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { radius, spacing, useTheme } from '../theme';
 
+type Key = string | number;
+
 interface Props<T> {
   items: T[];
-  getKey: (item: T) => string;
+  getKey: (item: T) => Key;
   getLabel: (item: T) => string;
-  selectedKey: string | undefined;
+  selectedKey: Key | undefined | null;
   onSelect: (item: T) => void;
   accent?: string;
 }

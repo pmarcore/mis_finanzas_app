@@ -1,13 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import {
+  useCardCycles,
   useCardDueDate,
   useCategories,
   useCreateTransaction,
   usePaymentMethods,
   usePeople,
 } from '../api/endpoints';
-import type { CategoryKind, ISODate, NewTransaction, Scope } from '../api/types';
+import {
+  OPERATION_LABELS,
+  OPERATIONS,
+  STATUS_LABELS,
+  type CategoryKind,
+  type Id,
+  type ISODate,
+  type NewTransaction,
+  type Operation,
+  type Scope,
+  type TransactionStatus,
+} from '../api/types';
 import { Card } from '../components/Card';
 import { ChipPicker } from '../components/ChipPicker';
 import { DateInput, Field, Input } from '../components/Field';
@@ -16,17 +28,10 @@ import { Segmented } from '../components/Segmented';
 import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
-import { isValidISODate, todayISO } from '../utils/format';
+import { addMonths, formatDate, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
 
-type Tipo = 'Gasto' | 'Ingreso';
-
-/** Interpreta montos escritos a la argentina: "1.234,50" → 1234.5. */
-function parseAmount(text: string): number | null {
-  const clean = text.replace(/[$\s.]/g, '').replace(',', '.');
-  if (!clean) return null;
-  const n = Number(clean);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+/** Operaciones que necesitan categoría; en el resto es opcional. */
+const NEEDS_CATEGORY: Operation[] = ['ingreso', 'gasto'];
 
 export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const { colors } = useTheme();
@@ -37,51 +42,78 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const paymentMethods = usePaymentMethods();
   const create = useCreateTransaction();
 
-  const [tipo, setTipo] = useState<Tipo>('Gasto');
+  const [operation, setOperation] = useState<Operation>('gasto');
+  const [status, setStatus] = useState<TransactionStatus>('realizado');
   const [amountText, setAmountText] = useState('');
   const [description, setDescription] = useState('');
   const [scope, setScope] = useState<Scope>(currentScope === 'memey' ? 'memey' : 'familia');
-  const [personId, setPersonId] = useState<string>();
+  const [personId, setPersonId] = useState<Id>();
   const [date, setDate] = useState<ISODate>(todayISO);
-  const [categoryId, setCategoryId] = useState<string>();
-  const [paymentMethodId, setPaymentMethodId] = useState<string>();
+  const [categoryId, setCategoryId] = useState<Id>();
+  const [paymentMethodId, setPaymentMethodId] = useState<Id>();
   const [installmentsText, setInstallmentsText] = useState('1');
   const [firstDueDate, setFirstDueDate] = useState('');
   const [dueEdited, setDueEdited] = useState(false);
+  const [paidCardId, setPaidCardId] = useState<Id>();
   const [submitted, setSubmitted] = useState(false);
 
-  const kind: CategoryKind = tipo === 'Gasto' ? 'gasto' : 'ingreso';
+  const isCardPayment = operation === 'pagoTarjeta';
+  const kind: CategoryKind = operation === 'ingreso' ? 'ingreso' : 'gasto';
+  const needsCategory = NEEDS_CATEGORY.includes(operation);
   const visibleCategories = useMemo(
-    () => (categories.data ?? []).filter((c) => c.kind === kind && c.scope === scope),
-    [categories.data, kind, scope],
+    () => (isCardPayment ? [] : (categories.data ?? []).filter((c) => c.kind === kind && c.scope === scope)),
+    [categories.data, kind, scope, isCardPayment],
   );
-  const method = paymentMethods.data?.find((m) => m.id === paymentMethodId);
-  const isCard = tipo === 'Gasto' && method?.type === 'tarjeta';
+  const allMethods = paymentMethods.data ?? [];
+  const cards = allMethods.filter((m) => m.isCard);
+  // Un pago de tarjeta sale de una caja: no se paga con otra tarjeta.
+  const visibleMethods = isCardPayment ? allMethods.filter((m) => !m.isCard) : allMethods;
+  const method = allMethods.find((m) => m.id === paymentMethodId);
+  const isCardPurchase = !isCardPayment && !!method?.isCard;
 
-  // Primer vencimiento sugerido por el backend según la tarjeta y la fecha de compra.
-  const due = useCardDueDate(isCard ? method?.id : undefined, isValidISODate(date) ? date : undefined);
+  // Compra con tarjeta: primer vencimiento sugerido por el backend (404 si falta el cierre).
+  const due = useCardDueDate(isCardPurchase ? method?.id : undefined, isValidISODate(date) ? date : undefined);
+  // Pago de tarjeta: vencimientos cargados de la tarjeta pagada, para elegir rápido.
+  const paidCycles = useCardCycles(isCardPayment ? paidCardId : undefined);
+  const dueOptions = useMemo(
+    () => (paidCycles.data ?? []).map((c) => c.dueDate).filter((d) => !isValidISODate(date) || monthOf(d) >= addMonths(monthOf(date), -2)),
+    [paidCycles.data, date],
+  );
+
   useEffect(() => {
     setDueEdited(false);
-  }, [paymentMethodId, date]);
+    setFirstDueDate('');
+  }, [paymentMethodId, date, operation, paidCardId]);
   useEffect(() => {
-    if (isCard && !dueEdited && due.data?.firstDueDate) setFirstDueDate(due.data.firstDueDate);
-  }, [isCard, dueEdited, due.data?.firstDueDate]);
+    if (isCardPurchase && !dueEdited && !firstDueDate && due.data?.firstDueDate) setFirstDueDate(due.data.firstDueDate);
+  }, [isCardPurchase, dueEdited, firstDueDate, due.data?.firstDueDate]);
 
-  // Si cambia tipo/destino y la categoría ya no aplica, se limpia.
+  // Si cambia la operación/destino y la categoría o el medio ya no aplican, se limpian.
   useEffect(() => {
-    if (categoryId && !visibleCategories.some((c) => c.id === categoryId)) setCategoryId(undefined);
+    if (categoryId !== undefined && !visibleCategories.some((c) => c.id === categoryId)) setCategoryId(undefined);
   }, [visibleCategories, categoryId]);
+  useEffect(() => {
+    if (paymentMethodId !== undefined && !visibleMethods.some((m) => m.id === paymentMethodId))
+      setPaymentMethodId(undefined);
+  }, [visibleMethods, paymentMethodId]);
 
   const amount = parseAmount(amountText);
   const installments = Number.parseInt(installmentsText, 10);
   const errors = {
-    amount: amount === null ? 'Ingresá un monto mayor a cero.' : undefined,
-    person: !personId ? 'Elegí una persona.' : undefined,
+    amount: amount === null || amount <= 0 ? 'Ingresá un monto mayor a cero.' : undefined,
+    person: personId === undefined ? 'Elegí una persona.' : undefined,
     date: !isValidISODate(date) ? 'Fecha inválida (AAAA-MM-DD).' : undefined,
-    category: !categoryId ? 'Elegí una categoría.' : undefined,
-    paymentMethod: !paymentMethodId ? 'Elegí un medio de pago.' : undefined,
-    installments: isCard && !(installments >= 1) ? 'Cuotas inválidas.' : undefined,
-    firstDueDate: isCard && !isValidISODate(firstDueDate) ? 'El vencimiento es obligatorio para tarjetas.' : undefined,
+    category: needsCategory && categoryId === undefined ? 'Elegí una categoría.' : undefined,
+    paymentMethod: paymentMethodId === undefined ? 'Elegí un medio de pago.' : undefined,
+    installments: isCardPurchase && !(installments >= 1) ? 'Cuotas inválidas.' : undefined,
+    paidCard: isCardPayment && paidCardId === undefined ? 'Elegí la tarjeta que pagás.' : undefined,
+    firstDueDate: isCardPayment
+      ? !isValidISODate(firstDueDate)
+        ? 'Indicá el vencimiento que pagás (AAAA-MM-DD).'
+        : undefined
+      : isCardPurchase && firstDueDate !== '' && !isValidISODate(firstDueDate)
+        ? 'Fecha inválida (AAAA-MM-DD).'
+        : undefined,
   };
   const hasErrors = Object.values(errors).some(Boolean);
   const show = (e?: string) => (submitted ? e : undefined);
@@ -92,23 +124,27 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
     setInstallmentsText('1');
     setFirstDueDate('');
     setDueEdited(false);
+    setPaidCardId(undefined);
     setSubmitted(false);
   };
 
   const onSubmit = () => {
     setSubmitted(true);
-    if (hasErrors || amount === null) return;
+    if (hasErrors || amount === null || personId === undefined || paymentMethodId === undefined) return;
     const tx: NewTransaction = {
       scope,
-      personId: personId!,
-      operation: tipo,
+      personId,
+      operation,
       date,
       description: description.trim(),
-      categoryId: categoryId!,
+      categoryId: categoryId ?? null,
       amount,
-      paymentMethodId: paymentMethodId!,
-      installments: isCard ? installments : 1,
-      firstDueDate: isCard ? firstDueDate : undefined,
+      paymentMethodId,
+      installments: isCardPurchase ? installments : 1,
+      // Compra con tarjeta: si queda vacío, el backend propone el vencimiento según los cierres.
+      firstDueDate: (isCardPurchase || isCardPayment) && firstDueDate ? firstDueDate : undefined,
+      status,
+      paidCardId: isCardPayment ? paidCardId : undefined,
     };
     create.mutate(tx, {
       onSuccess: () => {
@@ -119,17 +155,24 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   };
 
   const accent = scopeColor(colors, scope);
+  const dueHint = due.isFetching
+    ? 'Calculando según cierre de la tarjeta…'
+    : due.error
+      ? 'Falta cargar el cierre de la tarjeta para esa fecha en Configuración.'
+      : 'Sugerido según el cierre; podés editarlo.';
 
   return (
     <Screen>
-      <Segmented<Tipo>
-        value={tipo}
-        onChange={setTipo}
-        options={[
-          { value: 'Gasto', label: 'Gasto', color: colors.bad },
-          { value: 'Ingreso', label: 'Ingreso', color: colors.good },
-        ]}
-      />
+      <Field label="Operación">
+        <ChipPicker
+          items={[...OPERATIONS]}
+          getKey={(o) => o}
+          getLabel={(o) => OPERATION_LABELS[o]}
+          selectedKey={operation}
+          onSelect={setOperation}
+          accent={accent}
+        />
+      </Field>
 
       <Card>
         <Field label="Monto" error={show(errors.amount)}>
@@ -158,22 +201,38 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
             accent={accent}
           />
         </Field>
-        <Field label={tipo === 'Gasto' ? 'Fecha de compra' : 'Fecha'} error={show(errors.date)}>
+        <Field label={isCardPurchase ? 'Fecha de compra' : 'Fecha'} error={show(errors.date)}>
           <DateInput value={date} onChangeText={setDate} />
         </Field>
-        <Field label="Categoría" error={show(errors.category)}>
-          <ChipPicker
-            items={visibleCategories}
-            getKey={(c) => c.id}
-            getLabel={(c) => c.name}
-            selectedKey={categoryId}
-            onSelect={(c) => setCategoryId(c.id)}
-            accent={accent}
+        <Field label="Estado">
+          <Segmented<TransactionStatus>
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: 'realizado', label: STATUS_LABELS.realizado, color: accent },
+              { value: 'previsto', label: STATUS_LABELS.previsto, color: colors.warn },
+            ]}
           />
         </Field>
-        <Field label="Medio de pago" error={show(errors.paymentMethod)}>
+        {!isCardPayment && (
+          <Field
+            label={needsCategory ? 'Categoría' : 'Categoría (opcional)'}
+            error={show(errors.category)}
+          >
+            <ChipPicker
+              items={visibleCategories}
+              getKey={(c) => c.id}
+              getLabel={(c) => c.name}
+              selectedKey={categoryId}
+              // Tocar la elegida la deselecciona (sólo cuando es opcional).
+              onSelect={(c) => setCategoryId(!needsCategory && c.id === categoryId ? undefined : c.id)}
+              accent={accent}
+            />
+          </Field>
+        )}
+        <Field label={isCardPayment ? 'Pagás desde' : 'Medio de pago'} error={show(errors.paymentMethod)}>
           <ChipPicker
-            items={paymentMethods.data ?? []}
+            items={visibleMethods}
             getKey={(m) => m.id}
             getLabel={(m) => m.name}
             selectedKey={paymentMethodId}
@@ -183,16 +242,48 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
         </Field>
       </Card>
 
-      {isCard && (
+      {isCardPayment && (
+        <Card title="Tarjeta que pagás" accent={accent}>
+          <Field label="Tarjeta" error={show(errors.paidCard)}>
+            <ChipPicker
+              items={cards}
+              getKey={(c) => c.id}
+              getLabel={(c) => c.name}
+              selectedKey={paidCardId}
+              onSelect={(c) => setPaidCardId(c.id)}
+              accent={accent}
+            />
+          </Field>
+          <Field
+            label="Vencimiento que pagás"
+            error={show(errors.firstDueDate)}
+            hint={
+              paidCardId !== undefined && !paidCycles.isLoading && dueOptions.length === 0
+                ? 'Esta tarjeta no tiene cierres cargados; escribí la fecha.'
+                : undefined
+            }
+          >
+            {dueOptions.length > 0 && (
+              <ChipPicker
+                items={dueOptions}
+                getKey={(d) => d}
+                getLabel={formatDate}
+                selectedKey={firstDueDate}
+                onSelect={setFirstDueDate}
+                accent={accent}
+              />
+            )}
+            <DateInput value={firstDueDate} onChangeText={setFirstDueDate} />
+          </Field>
+        </Card>
+      )}
+
+      {isCardPurchase && (
         <Card title="Tarjeta" accent={accent}>
           <Field label="Cuotas" error={show(errors.installments)}>
             <Input value={installmentsText} onChangeText={setInstallmentsText} keyboardType="number-pad" maxLength={2} />
           </Field>
-          <Field
-            label="Primer vencimiento"
-            error={show(errors.firstDueDate)}
-            hint={due.isFetching ? 'Calculando según cierre de la tarjeta…' : 'Sugerido según el cierre; podés editarlo.'}
-          >
+          <Field label="Primer vencimiento" error={show(errors.firstDueDate)} hint={dueHint}>
             <DateInput
               value={firstDueDate}
               onChangeText={(t) => {
@@ -216,7 +307,9 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
         {create.isPending ? (
           <ActivityIndicator color={colors.surface} />
         ) : (
-          <Text style={[styles.submitText, { color: colors.surface }]}>Guardar {tipo.toLowerCase()}</Text>
+          <Text style={[styles.submitText, { color: colors.surface }]}>
+            Guardar {OPERATION_LABELS[operation].toLowerCase()}
+          </Text>
         )}
       </Pressable>
     </Screen>

@@ -1,35 +1,65 @@
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useCategories, useConfirmTransaction, useTransactions } from '../api/endpoints';
-import type { Transaction } from '../api/types';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  useCategories,
+  useConfirmTransaction,
+  useDeleteTransaction,
+  usePaymentMethods,
+  useTransactions,
+} from '../api/endpoints';
+import { OPERATION_LABELS, type Id, type Transaction } from '../api/types';
 import { MoneyText } from '../components/MoneyText';
 import { QueryState } from '../components/QueryState';
 import { ScopeSelector } from '../components/ScopeSelector';
 import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
-import { addMonths, formatDate, monthOf } from '../utils/format';
+import { endOfMonth, formatDate, monthOf } from '../utils/format';
 
 export function MovimientosScreen() {
   const { scope, cutoff } = useScope();
   const { colors } = useTheme();
   // Mes de la fecha de corte; el backend filtra.
   const month = monthOf(cutoff);
-  const q = useTransactions({ scope, from: `${month}-01`, to: `${addMonths(month, 1)}-01` });
+  // `from` y `to` son inclusivos en el backend.
+  const q = useTransactions({ scope, from: `${month}-01`, to: endOfMonth(month) });
   const categories = useCategories();
+  const methods = usePaymentMethods();
   const confirm = useConfirmTransaction();
+  const remove = useDeleteTransaction();
 
-  const categoryName = (id: string) => categories.data?.find((c) => c.id === id)?.name ?? '';
+  const categoryName = (id: Id | null) =>
+    id === null ? '' : (categories.data?.find((c) => c.id === id)?.name ?? '');
+  const methodName = (id: Id | null | undefined) =>
+    id == null ? '' : (methods.data?.find((m) => m.id === id)?.name ?? '');
+
+  const askDelete = (t: Transaction) =>
+    Alert.alert('Borrar movimiento', `¿Borrar "${t.description || OPERATION_LABELS[t.operation]}"?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Borrar',
+        style: 'destructive',
+        onPress: () =>
+          remove.mutate(t.id, {
+            onError: (e) => Alert.alert('No se pudo borrar', e.message),
+          }),
+      },
+    ]);
 
   const renderItem = ({ item }: { item: Transaction }) => {
-    const previsto = item.status === 'Previsto';
+    const previsto = item.status === 'previsto';
+    const label = OPERATION_LABELS[item.operation];
     return (
-      <View style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <Pressable
+        onLongPress={() => askDelete(item)}
+        style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
+      >
         <View style={[styles.dot, { backgroundColor: scopeColor(colors, item.scope) }]} />
         <View style={{ flex: 1 }}>
           <Text style={{ color: colors.ink, fontWeight: '600' }} numberOfLines={1}>
-            {item.description || item.operation}
+            {item.description || label}
           </Text>
           <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
-            {formatDate(item.date)} · {item.operation}
+            {formatDate(item.date)} · {label}
+            {item.operation === 'pagoTarjeta' && methodName(item.paidCardId) ? ` ${methodName(item.paidCardId)}` : ''}
             {categoryName(item.categoryId) ? ` · ${categoryName(item.categoryId)}` : ''}
             {item.installments > 1 ? ` · ${item.installments} cuotas` : ''}
           </Text>
@@ -38,7 +68,9 @@ export function MovimientosScreen() {
           <MoneyText value={item.amount} size="sm" signColor={false} />
           {previsto && (
             <Pressable
-              onPress={() => confirm.mutate(item.id)}
+              onPress={() =>
+                confirm.mutate({ id: item.id }, { onError: (e) => Alert.alert('No se pudo confirmar', e.message) })
+              }
               disabled={confirm.isPending}
               hitSlop={6}
             >
@@ -46,7 +78,7 @@ export function MovimientosScreen() {
             </Pressable>
           )}
         </View>
-      </View>
+      </Pressable>
     );
   };
 
@@ -64,7 +96,7 @@ export function MovimientosScreen() {
       >
         <FlatList
           data={q.data ?? []}
-          keyExtractor={(t) => t.id}
+          keyExtractor={(t) => String(t.id)}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           refreshing={q.isRefetching}
