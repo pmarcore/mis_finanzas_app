@@ -1,6 +1,15 @@
 // Wrapper mínimo sobre fetch para hablar con el backend .NET.
 
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5080').replace(/\/+$/, '');
+import Constants from 'expo-constants';
+
+// Sin EXPO_PUBLIC_API_URL, usa la misma PC que sirve la app en Expo (puerto 5080):
+// así no hay que tocar .env cada vez que cambia la IP de la red.
+function defaultApiUrl(): string {
+  const host = Constants.expoConfig?.hostUri?.split(':')[0];
+  return `http://${host || 'localhost'}:5080`;
+}
+
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || defaultApiUrl()).replace(/\/+$/, '');
 
 // TODO: reemplazar por el token real cuando exista autenticación.
 let authToken: string | null = null;
@@ -43,12 +52,19 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
-  const res = await fetch(buildUrl(path, opts.query), {
-    method: opts.method ?? 'GET',
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    signal: opts.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, opts.query), {
+      method: opts.method ?? 'GET',
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    });
+  } catch (e) {
+    if (opts.signal?.aborted) throw e;
+    // Sin respuesta del servidor: mostrar a qué URL se intentó llegar ayuda a detectar un .env viejo o una IP equivocada.
+    throw new ApiError(0, `No se pudo conectar con la API en ${API_URL}.`);
+  }
 
   const text = await res.text();
   let data: unknown = undefined;

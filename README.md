@@ -30,7 +30,6 @@ Requisitos: Node 20 o superior y la app Expo Go en el teléfono.
 
 ```bash
 cd mobile
-cp .env.example .env    # EXPO_PUBLIC_API_URL apunta a la API
 npm install
 npx expo start
 ```
@@ -48,7 +47,9 @@ Para cargar la foto de octubre (y volver a ese punto cuando quieras empezar de c
 - Windows (PowerShell): `powershell -ExecutionPolicy Bypass -File .\scripts\seed-pruebas.ps1`
 - Mac o Linux: `./scripts/seed-pruebas.sh`
 
-Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC y `mobile/.env` tiene que apuntar a la IP de la PC (por ejemplo `EXPO_PUBLIC_API_URL=http://192.168.0.10:5080`), no a `localhost`. En Windows la IP sale de `ipconfig` ("Dirección IPv4" del adaptador Wi-Fi). Si Windows pregunta por el firewall al levantar Docker o Expo, permití redes privadas.
+Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC. La app busca la API en la misma PC que corre `npx expo start` (puerto 5080), así que no hace falta configurar la IP; si cambia, alcanza con reiniciar Expo y volver a escanear el QR. `EXPO_PUBLIC_API_URL` en `mobile/.env` solo hace falta si la API corre en otra máquina, y después de cambiarlo hay que reiniciar Expo con `npx expo start -c`. Si Windows pregunta por el firewall al levantar Docker o Expo, permití redes privadas.
+
+Si la app dice "No se pudo conectar con la API en ...", abrí `http://<IP de la PC>:5080/health` en el navegador del celular. Si ahí tampoco carga, el problema es la red o el firewall de Windows (la red Wi-Fi tiene que estar como "Privada"); si carga, revisá que la URL del mensaje sea la de `.env`.
 
 ## Estado
 
