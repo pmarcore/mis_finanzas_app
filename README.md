@@ -35,6 +35,17 @@ npm install
 npx expo start
 ```
 
+## Ambiente de pruebas (local)
+
+Requisitos: Docker. Levanta la API con su propia base, separada de la de desarrollo, y la carga con la foto de octubre.
+
+```bash
+docker compose up -d --build
+./scripts/seed-pruebas.sh        # vuelve a dejar la foto de octubre cuando quieras empezar de cero
+```
+
+Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC y `mobile/.env` tiene que apuntar a la IP de la PC (por ejemplo `EXPO_PUBLIC_API_URL=http://192.168.0.10:5080`), no a `localhost`.
+
 ## Estado
 
 API con dashboard, movimientos, tarjetas, gastos fijos, presupuesto, reporte presupuestado vs real e importación de la planilla. Octubre importado y comparado contra la planilla en los tests.
