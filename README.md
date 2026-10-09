@@ -37,14 +37,18 @@ npx expo start
 
 ## Ambiente de pruebas (local)
 
-Requisitos: Docker. Levanta la API con su propia base, separada de la de desarrollo, y la carga con la foto de octubre.
+Requisitos: Docker Desktop abierto (en Windows, con el motor de Linux; el ícono de la ballena tiene que decir "Engine running"). Levanta la API con su propia base, separada de la de desarrollo, y la carga con la foto de octubre.
 
 ```bash
 docker compose up -d --build
-./scripts/seed-pruebas.sh        # vuelve a dejar la foto de octubre cuando quieras empezar de cero
 ```
 
-Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC y `mobile/.env` tiene que apuntar a la IP de la PC (por ejemplo `EXPO_PUBLIC_API_URL=http://192.168.0.10:5080`), no a `localhost`.
+Para cargar la foto de octubre (y volver a ese punto cuando quieras empezar de cero):
+
+- Windows (PowerShell): `powershell -ExecutionPolicy Bypass -File .\scripts\seed-pruebas.ps1`
+- Mac o Linux: `./scripts/seed-pruebas.sh`
+
+Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC y `mobile/.env` tiene que apuntar a la IP de la PC (por ejemplo `EXPO_PUBLIC_API_URL=http://192.168.0.10:5080`), no a `localhost`. En Windows la IP sale de `ipconfig` ("Dirección IPv4" del adaptador Wi-Fi). Si Windows pregunta por el firewall al levantar Docker o Expo, permití redes privadas.
 
 ## Estado
 
