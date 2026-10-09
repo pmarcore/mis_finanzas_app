@@ -48,7 +48,9 @@ Para cargar la foto de octubre (y volver a ese punto cuando quieras empezar de c
 - Windows (PowerShell): `powershell -ExecutionPolicy Bypass -File .\scripts\seed-pruebas.ps1`
 - Mac o Linux: `./scripts/seed-pruebas.sh`
 
-Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC y `mobile/.env` tiene que apuntar a la IP de la PC (por ejemplo `EXPO_PUBLIC_API_URL=http://192.168.0.10:5080`), no a `localhost`. En Windows la IP sale de `ipconfig` ("Dirección IPv4" del adaptador Wi-Fi). Si Windows pregunta por el firewall al levantar Docker o Expo, permití redes privadas.
+Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC y `mobile/.env` tiene que apuntar a la IP de la PC (por ejemplo `EXPO_PUBLIC_API_URL=http://192.168.0.10:5080`), no a `localhost`. En Windows la IP sale de `ipconfig` ("Dirección IPv4" del adaptador Wi-Fi). Si Windows pregunta por el firewall al levantar Docker o Expo, permití redes privadas. Después de cambiar `.env` reiniciá Expo con `npx expo start -c`, porque la URL queda fija en el bundle.
+
+Si la app dice "No se pudo conectar con la API en ...", abrí `http://<IP de la PC>:5080/health` en el navegador del celular. Si ahí tampoco carga, el problema es la red o el firewall de Windows (la red Wi-Fi tiene que estar como "Privada"); si carga, revisá que la URL del mensaje sea la de `.env`.
 
 ## Estado
 

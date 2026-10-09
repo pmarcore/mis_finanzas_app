@@ -43,12 +43,19 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (authToken) headers.Authorization = `Bearer ${authToken}`;
 
-  const res = await fetch(buildUrl(path, opts.query), {
-    method: opts.method ?? 'GET',
-    headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    signal: opts.signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, opts.query), {
+      method: opts.method ?? 'GET',
+      headers,
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal,
+    });
+  } catch (e) {
+    if (opts.signal?.aborted) throw e;
+    // Sin respuesta del servidor: mostrar a qué URL se intentó llegar ayuda a detectar un .env viejo o una IP equivocada.
+    throw new ApiError(0, `No se pudo conectar con la API en ${API_URL}.`);
+  }
 
   const text = await res.text();
   let data: unknown = undefined;
