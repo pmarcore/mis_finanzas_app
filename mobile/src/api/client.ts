@@ -1,6 +1,15 @@
 // Wrapper mínimo sobre fetch para hablar con el backend .NET.
 
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5080').replace(/\/+$/, '');
+import Constants from 'expo-constants';
+
+// Sin EXPO_PUBLIC_API_URL, usa la misma PC que sirve la app en Expo (puerto 5080):
+// así no hay que tocar .env cada vez que cambia la IP de la red.
+function defaultApiUrl(): string {
+  const host = Constants.expoConfig?.hostUri?.split(':')[0];
+  return `http://${host || 'localhost'}:5080`;
+}
+
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || defaultApiUrl()).replace(/\/+$/, '');
 
 // TODO: reemplazar por el token real cuando exista autenticación.
 let authToken: string | null = null;
