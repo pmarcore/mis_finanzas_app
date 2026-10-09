@@ -1,0 +1,14 @@
+# Ambiente de pruebas local: API en http://localhost:5080 con su propia base en el volumen finanzas-pruebas.
+#   docker compose up -d --build
+#   ./scripts/seed-pruebas.sh            # carga la foto de octubre (borra lo que haya)
+services:
+  api:
+    build: ./backend
+    ports:
+      - "5080:8080"
+    volumes:
+      - finanzas-pruebas:/data
+    restart: unless-stopped
+
+volumes:
+  finanzas-pruebas:
