@@ -2,9 +2,15 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+/**
+ * Movimientos: `vista: 'caja'` abre el flujo de caja con saldo acumulado y marca la línea pedida
+ * (`corte` = caja actual, `finDeMes` = caja a fin de mes). `n` distingue toques repetidos sobre la misma card.
+ */
+export type MovimientosParams = { vista: 'lista' } | { vista: 'caja'; marca: 'corte' | 'finDeMes'; n: number };
+
 export type TabParamList = {
   Inicio: undefined;
-  Movimientos: undefined;
+  Movimientos: MovimientosParams | undefined;
   Nuevo: undefined;
   Fijos: undefined;
   Presupuesto: undefined;

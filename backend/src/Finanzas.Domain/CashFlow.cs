@@ -136,10 +136,38 @@ public class CashFlowCalculator(
         return CashAt(scope, cutoff) + direct - CardOutstanding(impacts, cutoff, until).Sum(s => s.Outstanding) - estimated;
     }
 
-    /// <summary>Cuotas de compras con tarjeta ya hechas que vencen después de 'after': plata comprometida que todavía no salió.</summary>
-    public long CommittedCardInstallmentsAfter(Scope? scope, DateOnly after) =>
-        -Impacts(scope).Where(x => x.Impact.CardId is not null && x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate > after)
-                       .Sum(x => x.Impact.Amount);
+    /// <summary>
+    /// Movimientos de caja ordenados, con saldo acumulado: desde el inicio del mes del corte hasta el corte (realizados)
+    /// y después del corte hasta 'until' (pendientes, previstos, resúmenes de tarjeta y gasto estimado).
+    /// El saldo de la última línea realizada es <see cref="CashAt"/> y el de la última pendiente es <see cref="ProjectedAt"/>.
+    /// </summary>
+    public CashLedger Ledger(Scope? scope, DateOnly cutoff, DateOnly until)
+    {
+        var from = new DateOnly(cutoff.Year, cutoff.Month, 1);
+        var opening = CashAt(scope, from.AddDays(-1));
+        var impacts = Impacts(scope).Where(x => x.Impact.CardId is null).ToList();
+
+        // En la vista total una transferencia Familia↔Memey suma cero: se agrupa por movimiento y se omite.
+        static IEnumerable<CashLedgerLine> ByTransaction(IEnumerable<(Transaction Tx, CashImpact Impact)> xs) =>
+            xs.GroupBy(x => (x.Tx, x.Impact.ImpactDate))
+              .Select(g => new CashLedgerLine(g.Key.ImpactDate, g.Key.Tx, null, g.Sum(x => x.Impact.Amount)))
+              .Where(l => l.Amount != 0);
+
+        var done = ByTransaction(impacts.Where(x => x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate >= from && x.Impact.ImpactDate <= cutoff))
+            .OrderBy(l => l.Date).ThenBy(l => l.Transaction!.Id).ToList();
+
+        var pending = ByTransaction(impacts
+                .Where(x => x.Impact.ImpactDate <= until)
+                .Where(x => !(x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate <= cutoff))
+                .Where(x => !(x.Tx.Operation == Operation.PagoTarjeta && x.Tx.Status == TransactionStatus.Previsto)))
+            .Concat(CardOutstanding(Impacts(scope).ToList(), cutoff, until).Where(s => s.Outstanding > 0)
+                .Select(s => new CashLedgerLine(s.DueDate, null, s.CardId, -s.Outstanding)))
+            .Concat((estimates ?? []).Where(e => (scope is null || e.Scope == scope) && e.Date > cutoff && e.Date <= until)
+                .Select(e => new CashLedgerLine(e.Date, null, null, -e.Amount)))
+            .OrderBy(l => l.Date).ThenBy(l => l.Transaction?.Id ?? int.MaxValue).ToList();
+
+        return new CashLedger(from, opening, done, pending);
+    }
 
     public IEnumerable<(int CardId, DateOnly DueDate, long Expected, long Outstanding)> CardStatements(Scope? scope, DateOnly cutoff, DateOnly until) =>
         CardOutstanding(Impacts(scope).ToList(), cutoff, until);
@@ -167,3 +195,8 @@ public class CashFlowCalculator(
         }
     }
 }
+
+/// <summary>Línea de caja: un movimiento (Transaction), un resumen de tarjeta pendiente (CardId) o el gasto estimado del presupuesto (ambos null).</summary>
+public record CashLedgerLine(DateOnly Date, Transaction? Transaction, int? CardId, long Amount);
+
+public record CashLedger(DateOnly From, long Opening, IReadOnlyList<CashLedgerLine> Done, IReadOnlyList<CashLedgerLine> Pending);

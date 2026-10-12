@@ -33,7 +33,7 @@ flowchart LR
 | Consumo del presupuesto: gastos y cuota del auto realizados, con tarjeta el día de la compra; las cuotas anteriores a la apertura no consumen | `Budgeting.ConsumesBudget` |
 | Proyección del mes: variables al ritmo diario, fijos y deuda el mayor entre presupuesto y real; alertas 70/80/100/120% | `Budgeting.Report` |
 | Meses futuros: se descuenta el presupuesto no cubierto por gastos fijos cargados, el día 20 | `Budgeting.MonthlyEstimates` |
-| Caja libre = proyectado a fin de mes menos cuotas de tarjeta ya compradas que vencen después | `CashFlowCalculator.CommittedCardInstallmentsAfter` |
+| Flujo de caja con saldo acumulado: cierra en la caja actual al corte y en la caja a fin de mes | `CashFlowCalculator.Ledger` (`GET /cashflow`) |
 | Al crear o cambiar un gasto fijo (o los cierres de su tarjeta) se regeneran sus previstos; los realizados no se tocan | `RecurringRuleSync` |
 
 ## Datos

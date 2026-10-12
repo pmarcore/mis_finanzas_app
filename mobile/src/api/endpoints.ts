@@ -7,6 +7,7 @@ import type {
   CardCycle,
   CardDueDate,
   CashBox,
+  CashFlow,
   Category,
   ConfirmTransaction,
   Dashboard,
@@ -28,6 +29,7 @@ import type {
 
 export const queryKeys = {
   dashboard: (scope: ScopeView, date: ISODate) => ['dashboard', scope, date] as const,
+  cashFlow: (scope: ScopeView, date: ISODate) => ['cashflow', scope, date] as const,
   transactions: (filters: TransactionFilters) => ['transactions', filters] as const,
   cardDueDate: (cardId: Id, purchaseDate: ISODate) => ['cards', cardId, 'due-date', purchaseDate] as const,
   cardCycles: (cardId: Id) => ['cards', cardId, 'cycles'] as const,
@@ -46,6 +48,14 @@ export function useDashboard(scope: ScopeView, date: ISODate) {
   return useQuery({
     queryKey: queryKeys.dashboard(scope, date),
     queryFn: ({ signal }) => api.get<Dashboard>('/dashboard', { scope, date }, signal),
+  });
+}
+
+/** Flujo de caja del mes del corte con saldo acumulado (cierra en la caja actual y en la de fin de mes). */
+export function useCashFlow(scope: ScopeView, date: ISODate) {
+  return useQuery({
+    queryKey: queryKeys.cashFlow(scope, date),
+    queryFn: ({ signal }) => api.get<CashFlow>('/cashflow', { scope, date }, signal),
   });
 }
 
@@ -73,6 +83,7 @@ function useInvalidateMovements() {
     Promise.all([
       qc.invalidateQueries({ queryKey: ['transactions'] }),
       qc.invalidateQueries({ queryKey: ['dashboard'] }),
+      qc.invalidateQueries({ queryKey: ['cashflow'] }),
       qc.invalidateQueries({ queryKey: ['reports'] }),
     ]);
 }
@@ -131,6 +142,7 @@ export function useUpdateCardCycles(cardId: Id | undefined) {
         // Los gastos fijos con esta tarjeta se regeneran en el backend.
         qc.invalidateQueries({ queryKey: ['transactions'] }),
         qc.invalidateQueries({ queryKey: ['dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['cashflow'] }),
       ]),
   });
 }
@@ -150,6 +162,7 @@ function useInvalidateRules() {
       qc.invalidateQueries({ queryKey: ['recurring-rules'] }),
       qc.invalidateQueries({ queryKey: ['transactions'] }),
       qc.invalidateQueries({ queryKey: ['dashboard'] }),
+      qc.invalidateQueries({ queryKey: ['cashflow'] }),
       qc.invalidateQueries({ queryKey: ['reports'] }),
     ]);
 }
@@ -196,6 +209,7 @@ export function useUpdateBudgets(month: Month) {
         qc.invalidateQueries({ queryKey: queryKeys.budgets(month) }),
         qc.invalidateQueries({ queryKey: ['reports'] }),
         qc.invalidateQueries({ queryKey: ['dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['cashflow'] }),
       ]),
   });
 }
@@ -224,6 +238,7 @@ function useInvalidateSettings() {
     Promise.all([
       qc.invalidateQueries({ queryKey: queryKeys.settings }),
       qc.invalidateQueries({ queryKey: ['dashboard'] }),
+      qc.invalidateQueries({ queryKey: ['cashflow'] }),
       qc.invalidateQueries({ queryKey: ['reports'] }),
     ]);
 }
