@@ -21,6 +21,10 @@ export type RootStackParamList = {
   Reporte: { month?: string } | undefined;
   Tarjetas: undefined;
   Configuracion: undefined;
+  TiposOperacion: undefined;
+  Categorias: undefined;
+  MediosPago: undefined;
+  Ahorro: undefined;
 };
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

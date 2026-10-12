@@ -18,12 +18,15 @@ public record SheetSnapshot(
     List<SnapshotRule> Rules,
     List<SnapshotTransaction> Transactions);
 
+/// <summary>Operaciones como las nombra la planilla; cada una es el tipo de operación sembrado con el mismo id.</summary>
+public enum SheetOperation { Ingreso = 1, Gasto = 2, PagoTarjeta = 3, CuotaAuto = 4, Ahorro = 5, AporteAMemey = 6, RetiroDeMemey = 7 }
+
 public record SnapshotCycle(string Card, DateOnly ClosingDate, DateOnly DueDate);
 public record SnapshotCategory(string Name, Scope Scope, CategoryKind Kind, BudgetType BudgetType);
 public record SnapshotBudget(string Month, string Category, decimal Amount);
-public record SnapshotRule(string Key, Scope Scope, string Person, Operation Operation, string Description, string Category,
+public record SnapshotRule(string Key, Scope Scope, string Person, SheetOperation Operation, string Description, string Category,
     string PaymentMethod, int DayOfMonth, string StartMonth, decimal Amount);
-public record SnapshotTransaction(string ImportId, DateOnly Date, Scope Scope, string Person, Operation Operation, string Description,
+public record SnapshotTransaction(string ImportId, DateOnly Date, Scope Scope, string Person, SheetOperation Operation, string Description,
     string? Category, decimal Amount, string PaymentMethod, int Installments, DateOnly? FirstDueDate, TransactionStatus Status,
     string? PaidCard = null, string? Rule = null, bool PriorCommitment = false);
 
@@ -56,6 +59,8 @@ public static class SheetImport
         var warnings = new List<string>();
         var people = await db.People.ToDictionaryAsync(p => p.Name, StringComparer.OrdinalIgnoreCase);
         var methods = await db.PaymentMethods.ToDictionaryAsync(m => m.Name, StringComparer.OrdinalIgnoreCase);
+        var types = await db.OperationTypes.ToDictionaryAsync(t => t.Id);
+        OperationType Type(SheetOperation op) => types.TryGetValue((int)op, out var t) ? t : throw new InvalidOperationException($"Falta el tipo de operación {op}.");
         int Person(string name) => people.TryGetValue(name, out var p) ? p.Id : throw new InvalidOperationException($"Persona desconocida: {name}");
         PaymentMethod Method(string name) => methods.TryGetValue(name, out var m) ? m : throw new InvalidOperationException($"Medio de pago desconocido: {name}");
 
@@ -80,7 +85,7 @@ public static class SheetImport
 
         var rules = snap.Rules.ToDictionary(r => r.Key, r => new RecurringRule
         {
-            Scope = r.Scope, PersonId = Person(r.Person), Operation = r.Operation, Description = r.Description,
+            Scope = r.Scope, PersonId = Person(r.Person), OperationType = Type(r.Operation), Description = r.Description,
             CategoryId = Category(r.Scope, r.Category), PaymentMethodId = Method(r.PaymentMethod).Id, DayOfMonth = r.DayOfMonth,
             StartMonth = ParseMonth(r.StartMonth),
             Amounts = [new RecurringRuleAmount { FromMonth = ParseMonth(r.StartMonth), Amount = Cents(r.Amount) }],
@@ -96,16 +101,16 @@ public static class SheetImport
             method.Cycles = cycles.Where(c => c.PaymentMethodId == method.Id).ToList();
             var t = new Transaction
             {
-                ImportId = s.ImportId, Scope = s.Scope, PersonId = Person(s.Person), Operation = s.Operation, Date = s.Date,
+                ImportId = s.ImportId, Scope = s.Scope, PersonId = Person(s.Person), OperationType = Type(s.Operation), Date = s.Date,
                 Description = s.Description, CategoryId = s.Category is null ? null : Category(s.Scope, s.Category),
                 Amount = Cents(s.Amount), PaymentMethodId = method.Id, Installments = Math.Max(1, s.Installments),
                 FirstDueDate = s.FirstDueDate, Status = s.Status, IsPriorCommitment = s.PriorCommitment,
                 PaidCardId = s.PaidCard is null ? null : Method(s.PaidCard).Id,
                 RecurringRuleId = s.Rule is null ? null : rules[s.Rule].Id,
             };
-            if (method.IsCard && t.Operation != Operation.PagoTarjeta)
+            if (method.IsCard && t.OperationType.Kind != OperationKind.PagoTarjeta)
                 t.FirstDueDate ??= CardCalendar.ProposeDueDate(method.Cycles, t.Date);
-            if (method.IsCard && t.Operation != Operation.PagoTarjeta && t.FirstDueDate is null)
+            if (method.IsCard && t.OperationType.Kind != OperationKind.PagoTarjeta && t.FirstDueDate is null)
             {
                 warnings.Add($"Sin vencimiento para {t.Description} del {t.Date}: falta el cierre de {method.Name}.");
                 continue;

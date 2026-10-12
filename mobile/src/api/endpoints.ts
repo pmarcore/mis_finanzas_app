@@ -16,11 +16,13 @@ import type {
   Month,
   NewRecurringRule,
   NewTransaction,
+  OperationType,
   PaymentMethod,
   Person,
   RecurringRule,
   RecurringRuleSaveResult,
-  ScopeView,
+  Savings,
+  Scope,
   Settings,
   Transaction,
   TransactionStatus,
@@ -28,23 +30,25 @@ import type {
 } from './types';
 
 export const queryKeys = {
-  dashboard: (scope: ScopeView, date: ISODate) => ['dashboard', scope, date] as const,
-  cashFlow: (scope: ScopeView, date: ISODate) => ['cashflow', scope, date] as const,
+  dashboard: (scope: Scope, date: ISODate) => ['dashboard', scope, date] as const,
+  cashFlow: (scope: Scope, date: ISODate) => ['cashflow', scope, date] as const,
   transactions: (filters: TransactionFilters) => ['transactions', filters] as const,
   cardDueDate: (cardId: Id, purchaseDate: ISODate) => ['cards', cardId, 'due-date', purchaseDate] as const,
   cardCycles: (cardId: Id) => ['cards', cardId, 'cycles'] as const,
-  recurringRules: (scope?: ScopeView) => ['recurring-rules', scope ?? 'total'] as const,
+  recurringRules: (scope?: Scope) => ['recurring-rules', scope ?? 'todos'] as const,
   budgets: (month: Month) => ['budgets', month] as const,
-  budgetVsActual: (month: Month, cutoff: ISODate, scope: ScopeView) =>
+  budgetVsActual: (month: Month, cutoff: ISODate, scope: Scope) =>
     ['reports', 'budget-vs-actual', month, cutoff, scope] as const,
   settings: ['settings'] as const,
   people: ['people'] as const,
-  categories: (scope?: ScopeView) => ['categories', scope ?? 'total'] as const,
+  categories: (scope?: Scope) => ['categories', scope ?? 'todos'] as const,
   paymentMethods: ['payment-methods'] as const,
+  operationTypes: ['operation-types'] as const,
+  savings: (scope: Scope, date: ISODate) => ['savings', scope, date] as const,
 };
 
 // ---------- Dashboard ----------
-export function useDashboard(scope: ScopeView, date: ISODate) {
+export function useDashboard(scope: Scope, date: ISODate) {
   return useQuery({
     queryKey: queryKeys.dashboard(scope, date),
     queryFn: ({ signal }) => api.get<Dashboard>('/dashboard', { scope, date }, signal),
@@ -52,7 +56,7 @@ export function useDashboard(scope: ScopeView, date: ISODate) {
 }
 
 /** Flujo de caja del mes del corte con saldo acumulado (cierra en la caja actual y en la de fin de mes). */
-export function useCashFlow(scope: ScopeView, date: ISODate) {
+export function useCashFlow(scope: Scope, date: ISODate) {
   return useQuery({
     queryKey: queryKeys.cashFlow(scope, date),
     queryFn: ({ signal }) => api.get<CashFlow>('/cashflow', { scope, date }, signal),
@@ -61,7 +65,7 @@ export function useCashFlow(scope: ScopeView, date: ISODate) {
 
 // ---------- Movimientos ----------
 export interface TransactionFilters {
-  scope?: ScopeView;
+  scope?: Scope;
   /** Inclusivo. */
   from?: ISODate;
   /** Inclusivo. */
@@ -85,6 +89,7 @@ function useInvalidateMovements() {
       qc.invalidateQueries({ queryKey: ['dashboard'] }),
       qc.invalidateQueries({ queryKey: ['cashflow'] }),
       qc.invalidateQueries({ queryKey: ['reports'] }),
+      qc.invalidateQueries({ queryKey: ['savings'] }),
     ]);
 }
 
@@ -148,7 +153,7 @@ export function useUpdateCardCycles(cardId: Id | undefined) {
 }
 
 // ---------- Fijos (reglas recurrentes) ----------
-export function useRecurringRules(scope?: ScopeView) {
+export function useRecurringRules(scope?: Scope) {
   return useQuery({
     queryKey: queryKeys.recurringRules(scope),
     queryFn: ({ signal }) => api.get<RecurringRule[]>('/recurring-rules', { scope }, signal),
@@ -215,8 +220,7 @@ export function useUpdateBudgets(month: Month) {
 }
 
 // ---------- Reportes ----------
-/** `scope=total` (o vacío) el backend lo toma como familia. */
-export function useBudgetVsActual(month: Month, cutoff: ISODate, scope: ScopeView) {
+export function useBudgetVsActual(month: Month, cutoff: ISODate, scope: Scope) {
   return useQuery({
     queryKey: queryKeys.budgetVsActual(month, cutoff, scope),
     queryFn: ({ signal }) =>
@@ -270,8 +274,8 @@ export function usePeople() {
   });
 }
 
-/** Sin scope (o 'total') trae todas las categorías. */
-export function useCategories(scope?: ScopeView) {
+/** Sin scope trae las categorías de los dos ámbitos (también las inactivas: filtrar al ofrecerlas). */
+export function useCategories(scope?: Scope) {
   return useQuery({
     queryKey: queryKeys.categories(scope),
     queryFn: ({ signal }) => api.get<Category[]>('/categories', { scope }, signal),
@@ -279,10 +283,57 @@ export function useCategories(scope?: ScopeView) {
   });
 }
 
+/** Incluye los inactivos (para mostrar movimientos viejos); filtrar `active` al ofrecerlos. */
 export function usePaymentMethods() {
   return useQuery({
     queryKey: queryKeys.paymentMethods,
     queryFn: ({ signal }) => api.get<PaymentMethod[]>('/payment-methods', undefined, signal),
     staleTime: 5 * 60_000,
+  });
+}
+
+/** Todos los tipos de operación, activos e inactivos. */
+export function useOperationTypes() {
+  return useQuery({
+    queryKey: queryKeys.operationTypes,
+    queryFn: ({ signal }) => api.get<OperationType[]>('/operation-types', undefined, signal),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Alta/edición/baja de un catálogo. Cambiar el signo de un tipo recalcula sus movimientos: se invalida todo lo que depende. */
+function useCatalogMutations<T extends { id: Id }>(path: string, key: readonly unknown[]) {
+  const qc = useQueryClient();
+  const invalidate = () =>
+    Promise.all(
+      [key, ['transactions'], ['dashboard'], ['cashflow'], ['reports'], ['savings'], ['recurring-rules'], ['cards']].map(
+        (queryKey) => qc.invalidateQueries({ queryKey }),
+      ),
+    );
+  return {
+    create: useMutation({
+      mutationFn: (item: Omit<T, 'id'>) => api.post<T>(path, item),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: (item: T) => api.put<T>(`${path}/${item.id}`, item),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: Id) => api.delete(`${path}/${id}`),
+      onSuccess: invalidate,
+    }),
+  };
+}
+
+export const useOperationTypeMutations = () => useCatalogMutations<OperationType>('/operation-types', queryKeys.operationTypes);
+export const useCategoryMutations = () => useCatalogMutations<Category>('/categories', ['categories']);
+export const usePaymentMethodMutations = () => useCatalogMutations<PaymentMethod>('/payment-methods', queryKeys.paymentMethods);
+
+// ---------- Ahorro e inversión ----------
+export function useSavings(scope: Scope, date: ISODate) {
+  return useQuery({
+    queryKey: queryKeys.savings(scope, date),
+    queryFn: ({ signal }) => api.get<Savings>('/savings', { scope, date }, signal),
   });
 }

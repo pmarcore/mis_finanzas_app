@@ -25,12 +25,14 @@ flowchart LR
 | --- | --- |
 | La compra con tarjeta va al resumen del primer cierre igual o posterior a la fecha de compra | `CardCalendar.ProposeDueDate` |
 | Compra en N cuotas = un movimiento y N impactos en caja; el resto del redondeo va en la primera | `CashImpactBuilder.Build` |
-| Aporte a Memey y Retiro de Memey mueven plata entre cajas sin cambiar el total | `CashImpactBuilder.Build` |
+| Cada movimiento tiene un tipo de operación configurable (Configuración → Tipos de operación): en qué ámbitos se ofrece, si suma o resta de caja y su comportamiento (ingreso/gasto, pago de tarjeta, transferencia, ahorro, inversión) | `OperationType`, `CashImpactBuilder.Build` |
+| Las transferencias (Aporte a Memey, Retiro de Memey) mueven plata entre cajas sin cambiar el total | `CashImpactBuilder.Build` |
+| Ahorro e inversión salen de la caja (o vuelven con Suma) y se ven aparte; no consumen presupuesto | `Savings.BalanceAt` (`GET /savings`) |
 | Gastos fijos con medio de pago, monto vigente por mes, previstos hasta diciembre | `RecurringRuleExpander` |
 | Caja al corte = saldo inicial + realizados hasta la fecha de corte (hoy por defecto) | `CashFlowCalculator.CashAt` |
 | Por tarjeta y vencimiento: el mayor entre modelado, resumen real y pago previsto, menos lo pagado | `CashFlowCalculator.ProjectedAt` |
 | El impacto en caja va a la caja del ámbito del movimiento (un gasto familiar pagado con Memey MP sale de la caja familiar) | `CashImpactBuilder.Build` |
-| Consumo del presupuesto: gastos y cuota del auto realizados, con tarjeta el día de la compra; las cuotas anteriores a la apertura no consumen | `Budgeting.ConsumesBudget` |
+| Consumo del presupuesto: movimientos de tipo ingreso/gasto que restan de caja (gastos, cuota del auto) realizados, con tarjeta el día de la compra; las cuotas anteriores a la apertura no consumen | `Budgeting.ConsumesBudget` |
 | Proyección del mes: variables al ritmo diario, fijos y deuda el mayor entre presupuesto y real; alertas 70/80/100/120% | `Budgeting.Report` |
 | Meses futuros: se descuenta el presupuesto no cubierto por gastos fijos cargados, el día 20 | `Budgeting.MonthlyEstimates` |
 | Flujo de caja con saldo acumulado: cierra en la caja actual al corte y en la caja a fin de mes | `CashFlowCalculator.Ledger` (`GET /cashflow`) |
@@ -42,7 +44,7 @@ Montos en centavos (`long`), fechas `DateOnly`. Las proyecciones leen solo `Cash
 
 ## Endpoints
 
-Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`familia`, `pagoTarjeta`, `realizado`). `scope` acepta `familia`, `memey` o `total`.
+Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`familia`, `pagoTarjeta`, `realizado`). `scope` acepta `familia` o `memey`: no hay vista total (sin indicar, saldos y reportes son de Familia; los listados traen los dos ámbitos).
 
 | Método y ruta | Para qué |
 | --- | --- |
@@ -53,5 +55,24 @@ Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`fami
 | `GET/PUT /budgets/{month}` | Presupuesto mensual por categoría |
 | `GET /reports/budget-vs-actual?month&cutoff&scope` | Presupuestado vs real con fecha de corte |
 | `GET/PUT /settings`, `PUT /settings/cash-boxes/{id}` | Saldos iniciales, piso de caja y umbrales |
-| `GET /people`, `GET /categories`, `GET /payment-methods` | Catálogos |
+| `GET /people` | Personas |
+| `GET/POST /operation-types?scope`, `PUT/DELETE /operation-types/{id}` | Tipos de operación. Cambiar el efecto recalcula sus movimientos |
+| `GET/POST /categories?scope`, `PUT/DELETE /categories/{id}` | Categorías |
+| `GET/POST /payment-methods`, `PUT/DELETE /payment-methods/{id}` | Medios de pago. Lo que está en uso no se borra: se desactiva (`active`) |
+| `GET /savings?scope&date` | Saldo de ahorro e inversiones con sus movimientos y el valor de mercado si hay proveedor |
+| `POST /investments/sync?scope` | Trae el valor de mercado del broker (503 mientras Invertir Online no esté conectado) |
 | `POST /import/sheet?replace` | Carga una foto de la planilla (`data/import`) |
+
+## Inversiones e Invertir Online
+
+El saldo de inversiones es lo aportado neto (movimientos de tipo Inversión: aportes menos rescates). El valor de mercado
+llega por `IInvestmentProvider` (`Finanzas.Domain/Investments.cs`): hoy está registrado `SinProveedorDeInversiones`, que no
+informa nada, y la app muestra "pendiente de conectar con Invertir Online".
+
+Para conectarlo:
+
+1. Implementar `IInvestmentProvider` contra la API de Invertir Online (token con usuario y contraseña, después el
+   portafolio de la cuenta) y devolver cada tenencia como `InvestmentPosition` con su valor en centavos.
+2. Registrarlo en `Program.cs` en lugar de `SinProveedorDeInversiones`, con las credenciales como secretos de configuración
+   (nunca en el repo).
+3. `POST /investments/sync?scope=familia` guarda el valor del día en `InvestmentValuation`; `GET /savings` muestra el último.

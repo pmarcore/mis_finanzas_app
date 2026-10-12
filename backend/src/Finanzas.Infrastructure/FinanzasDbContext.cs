@@ -17,6 +17,8 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
     public DbSet<RecurringRuleAmount> RecurringRuleAmounts => Set<RecurringRuleAmount>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<Settings> Settings => Set<Settings>();
+    public DbSet<OperationType> OperationTypes => Set<OperationType>();
+    public DbSet<InvestmentValuation> InvestmentValuations => Set<InvestmentValuation>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -25,6 +27,15 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
         b.Entity<PaymentMethod>().HasMany(x => x.Cycles).WithOne().HasForeignKey(c => c.PaymentMethodId);
         b.Entity<PaymentMethod>().Ignore(x => x.IsCard);
         b.Entity<CardCycle>().HasIndex(x => new { x.PaymentMethodId, x.DueDate }).IsUnique();
+
+        // El tipo define signo y comportamiento: se carga siempre con el movimiento y con el gasto fijo.
+        b.Entity<OperationType>().Ignore(x => x.Sign).Ignore(x => x.IsExpense);
+        b.Entity<OperationType>().HasIndex(x => x.Name).IsUnique();
+        b.Entity<Transaction>().HasOne(x => x.OperationType).WithMany().HasForeignKey(x => x.OperationTypeId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<Transaction>().Navigation(x => x.OperationType).AutoInclude();
+        b.Entity<RecurringRule>().HasOne(x => x.OperationType).WithMany().HasForeignKey(x => x.OperationTypeId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<RecurringRule>().Navigation(x => x.OperationType).AutoInclude();
+        b.Entity<InvestmentValuation>().HasIndex(x => new { x.Scope, x.Date });
 
         b.Entity<Transaction>().HasMany(x => x.Impacts).WithOne().HasForeignKey(i => i.TransactionId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transaction>().HasIndex(x => x.Date);
@@ -58,5 +69,18 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
             new PaymentMethod { Id = 7, Name = "Tarjeta Mercado Pago", Type = PaymentMethodType.Tarjeta, CashBoxId = 1 });
 
         b.Entity<Settings>().HasData(new Settings { Id = 1 });
+
+        // Los 7 tipos de la planilla (mismos ids que la operación que tenían antes) más inversión y rescates.
+        b.Entity<OperationType>().HasData(
+            new OperationType { Id = 1, Name = "Ingreso", Kind = OperationKind.Movimiento, Effect = CashEffect.Suma, ForFamilia = true, ForMemey = true },
+            new OperationType { Id = 2, Name = "Gasto", Kind = OperationKind.Movimiento, Effect = CashEffect.Resta, ForFamilia = true, ForMemey = true },
+            new OperationType { Id = 3, Name = "Pago tarjeta", Kind = OperationKind.PagoTarjeta, Effect = CashEffect.Resta, ForFamilia = true, ForMemey = true },
+            new OperationType { Id = 4, Name = "Cuota auto", Kind = OperationKind.Movimiento, Effect = CashEffect.Resta, ForFamilia = true, ForMemey = false },
+            new OperationType { Id = 5, Name = "Ahorro", Kind = OperationKind.Ahorro, Effect = CashEffect.Resta, ForFamilia = true, ForMemey = true },
+            new OperationType { Id = 6, Name = "Aporte a Memey", Kind = OperationKind.Transferencia, Effect = CashEffect.Resta, ForFamilia = true, ForMemey = false, TransferTo = Scope.Memey },
+            new OperationType { Id = 7, Name = "Retiro de Memey", Kind = OperationKind.Transferencia, Effect = CashEffect.Resta, ForFamilia = false, ForMemey = true, TransferTo = Scope.Familia },
+            new OperationType { Id = 8, Name = "Inversión", Kind = OperationKind.Inversion, Effect = CashEffect.Resta, ForFamilia = true, ForMemey = true },
+            new OperationType { Id = 9, Name = "Retiro de ahorro", Kind = OperationKind.Ahorro, Effect = CashEffect.Suma, ForFamilia = true, ForMemey = true },
+            new OperationType { Id = 10, Name = "Rescate de inversión", Kind = OperationKind.Inversion, Effect = CashEffect.Suma, ForFamilia = true, ForMemey = true });
     }
 }

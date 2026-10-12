@@ -26,10 +26,10 @@ export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>)
     setDraft(Object.fromEntries((q.data ?? []).map((b) => [b.categoryId, amountToInput(b.amount)])));
   }, [q.data]);
 
-  // Todas las categorías de gasto (para poder presupuestar un mes vacío) más las que ya tengan monto.
+  // Las categorías de gasto activas (para poder presupuestar un mes vacío) más las que ya tengan monto.
   const rows = useMemo(() => {
     const all = categories.data ?? [];
-    const ids = new Set(all.filter((c) => c.kind === 'gasto').map((c) => c.id));
+    const ids = new Set(all.filter((c) => c.kind === 'gasto' && c.active).map((c) => c.id));
     (q.data ?? []).forEach((b) => ids.add(b.categoryId));
     return [...ids].map((id) => {
       const c = all.find((x) => x.id === id);

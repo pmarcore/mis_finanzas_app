@@ -7,14 +7,13 @@ export type ISODate = string; // 'YYYY-MM-DD'
 export type Month = string; // 'YYYY-MM'
 export type Id = number;
 
+/** Familia y Memey se ven siempre por separado: no hay vista total. */
 export type Scope = 'familia' | 'memey';
-/** Vista seleccionada en la app: un ámbito o la suma de ambos (query param `scope=total`). */
-export type ScopeView = Scope | 'total';
+export const SCOPES: Scope[] = ['familia', 'memey'];
 
-export const SCOPE_LABELS: Record<ScopeView, string> = {
+export const SCOPE_LABELS: Record<Scope, string> = {
   familia: 'Familia',
   memey: 'Memey',
-  total: 'Total',
 };
 
 export interface Person {
@@ -34,12 +33,21 @@ export interface CashBox {
 
 export type PaymentMethodType = 'debito' | 'efectivo' | 'billetera' | 'tarjeta';
 
+export const PAYMENT_METHOD_TYPE_LABELS: Record<PaymentMethodType, string> = {
+  debito: 'Débito / transferencia',
+  efectivo: 'Efectivo',
+  billetera: 'Billetera virtual',
+  tarjeta: 'Tarjeta de crédito',
+};
+
 export interface PaymentMethod {
   id: Id;
   name: string;
   type: PaymentMethodType;
   cashBoxId: Id;
   isCard: boolean;
+  /** Inactivo: no se ofrece al cargar; los movimientos existentes lo conservan. */
+  active: boolean;
 }
 
 export interface CardCycle {
@@ -64,29 +72,45 @@ export interface Category {
   scope: Scope;
   kind: CategoryKind;
   budgetType: BudgetType;
+  active: boolean;
 }
 
-export const OPERATIONS = [
-  'ingreso',
-  'gasto',
-  'pagoTarjeta',
-  'cuotaAuto',
-  'ahorro',
-  'aporteAMemey',
-  'retiroDeMemey',
-] as const;
-export type Operation = (typeof OPERATIONS)[number];
-
-/** Etiquetas para mostrar/elegir operaciones (el valor de la API es la clave). */
-export const OPERATION_LABELS: Record<Operation, string> = {
+export const CATEGORY_KIND_LABELS: Record<CategoryKind, string> = {
   ingreso: 'Ingreso',
   gasto: 'Gasto',
-  pagoTarjeta: 'Pago tarjeta',
-  cuotaAuto: 'Cuota auto',
-  ahorro: 'Ahorro',
-  aporteAMemey: 'Aporte a Memey',
-  retiroDeMemey: 'Retiro de Memey',
 };
+
+/** Comportamiento de un tipo de operación. Los tipos en sí se configuran (GET /operation-types). */
+export type OperationKind = 'movimiento' | 'pagoTarjeta' | 'transferencia' | 'ahorro' | 'inversion';
+export type CashEffect = 'suma' | 'resta';
+
+export const OPERATION_KIND_LABELS: Record<OperationKind, string> = {
+  movimiento: 'Ingreso / gasto',
+  pagoTarjeta: 'Pago de tarjeta',
+  transferencia: 'Transferencia entre cajas',
+  ahorro: 'Ahorro',
+  inversion: 'Inversión',
+};
+
+export const CASH_EFFECT_LABELS: Record<CashEffect, string> = {
+  suma: 'Suma a la caja',
+  resta: 'Resta de la caja',
+};
+
+export interface OperationType {
+  id: Id;
+  name: string;
+  kind: OperationKind;
+  /** En transferencias no aplica: sale de una caja y entra en la otra. */
+  effect: CashEffect;
+  /** Ámbitos donde se ofrece al cargar. */
+  scopes: Scope[];
+  /** Solo transferencias: caja que recibe. */
+  transferTo: Scope | null;
+  active: boolean;
+}
+
+export type NewOperationType = Omit<OperationType, 'id'>;
 
 export type TransactionStatus = 'realizado' | 'previsto';
 
@@ -99,7 +123,7 @@ export interface Transaction {
   id: Id;
   scope: Scope;
   personId: Id;
-  operation: Operation;
+  operationTypeId: Id;
   date: ISODate;
   description: string;
   categoryId: Id | null;
@@ -116,12 +140,12 @@ export interface Transaction {
 /**
  * Payload de POST /transactions.
  * - Compra con tarjeta: `firstDueDate` puede omitirse (el backend lo propone según los cierres).
- * - `pagoTarjeta`: `paidCardId` y `firstDueDate` (vencimiento que se paga) son obligatorios.
+ * - Tipo de operación `pagoTarjeta`: `paidCardId` y `firstDueDate` (vencimiento que se paga) son obligatorios.
  */
 export interface NewTransaction {
   scope: Scope;
   personId: Id;
-  operation: Operation;
+  operationTypeId: Id;
   date: ISODate;
   description: string;
   categoryId?: Id | null;
@@ -148,7 +172,7 @@ export interface RecurringRule {
   id: Id;
   scope: Scope;
   personId: Id;
-  operation: Operation;
+  operationTypeId: Id;
   description: string;
   categoryId: Id;
   paymentMethodId: Id;
@@ -189,7 +213,7 @@ export interface CardPayment {
 
 export interface Dashboard {
   cutoff: ISODate;
-  scope: ScopeView;
+  scope: Scope;
   cashNow: number;
   projectedEndOfMonth: number;
   quarter: { month: Month; balance: number }[];
@@ -207,12 +231,12 @@ export interface CashFlowLine {
   kind: 'movimiento' | 'resumenTarjeta' | 'gastoEstimado';
   transactionId: Id | null;
   scope: Scope | null;
-  operation: Operation | null;
+  operationTypeId: Id | null;
   categoryId: Id | null;
   status: TransactionStatus | null;
   /** Tarjeta del resumen pendiente (`resumenTarjeta`). */
   cardId: Id | null;
-  /** Tarjeta que paga un movimiento `pagoTarjeta`. */
+  /** Tarjeta que paga un movimiento de pago de tarjeta. */
   paidCardId: Id | null;
   description: string;
   amount: number;
@@ -224,7 +248,7 @@ export interface CashFlowLine {
 
 /** Flujo de caja del mes del corte. `cashNow` = caja actual del dashboard; `projected` = caja a fin de mes. */
 export interface CashFlow {
-  scope: ScopeView;
+  scope: Scope;
   from: ISODate;
   cutoff: ISODate;
   until: ISODate;
@@ -279,3 +303,28 @@ export interface Settings extends Thresholds {
 }
 
 export type UpdateSettings = Thresholds;
+
+/** Movimiento hacia (monto positivo) o desde (negativo) el ahorro o las inversiones. */
+export interface SavingsMovement {
+  id: Id;
+  date: ISODate;
+  operationTypeId: Id;
+  description: string;
+  amount: number;
+  status: TransactionStatus;
+}
+
+/** GET /savings: saldos aparte de la caja. `marketValue` llega cuando haya un proveedor conectado (Invertir Online). */
+export interface Savings {
+  scope: Scope;
+  cutoff: ISODate;
+  ahorro: { balance: number; movements: SavingsMovement[] };
+  inversion: {
+    balance: number;
+    marketValue: number | null;
+    marketValueDate: ISODate | null;
+    provider: string;
+    providerConnected: boolean;
+    movements: SavingsMovement[];
+  };
+}

@@ -40,7 +40,7 @@ mobile/
     │   ├── types.ts         # tipos del dominio (espejo del backend)
     │   └── endpoints.ts     # hooks de react-query por endpoint
     ├── state/
-    │   └── scope.tsx        # ámbito seleccionado (familia/memey/total) y fecha de corte
+    │   └── scope.tsx        # ámbito seleccionado (familia/memey) y fecha de corte
     ├── navigation/
     │   ├── RootNavigator.tsx  # tabs: Inicio, Movimientos, Nuevo, Fijos, Presupuesto
     │   │                      # stack: Reporte, Tarjetas, Configuración (engranaje)
@@ -56,8 +56,8 @@ mobile/
 La fuente de verdad es `backend/src/Finanzas.Api/Endpoints.cs` y `Dtos.cs`; `src/api/types.ts` es su espejo.
 
 - JSON en camelCase; ids numéricos; enums como strings camelCase:
-  - `scope`: `familia` | `memey` (el query param también acepta `total` = ambos).
-  - `operation`: `ingreso` | `gasto` | `pagoTarjeta` | `cuotaAuto` | `ahorro` | `aporteAMemey` | `retiroDeMemey`. Las etiquetas para mostrar están en `OPERATION_LABELS`.
+  - `scope`: `familia` | `memey` (no hay vista total).
+  - `operationTypeId`: id de un tipo de operación configurable (`GET /operation-types`); su `kind` (`movimiento` | `pagoTarjeta` | `transferencia` | `ahorro` | `inversion`) y `effect` (`suma` | `resta`) definen cómo mueve la caja.
   - `status`: `realizado` | `previsto`; tipo de medio de pago: `debito` | `efectivo` | `billetera` | `tarjeta`.
   - Categorías: `kind` `ingreso` | `gasto`; `budgetType` `fijo` | `variable` | `deuda`.
 - Compra con tarjeta: `firstDueDate` es opcional (el backend lo propone con los cierres; si falta el cierre responde 400 con un mensaje).

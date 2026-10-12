@@ -153,6 +153,9 @@ namespace Finanzas.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("Active")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("BudgetType")
                         .HasColumnType("INTEGER");
 
@@ -174,10 +177,179 @@ namespace Finanzas.Infrastructure.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("Finanzas.Domain.InvestmentValuation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("MarketValue")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Scope", "Date");
+
+                    b.ToTable("InvestmentValuations");
+                });
+
+            modelBuilder.Entity("Finanzas.Domain.OperationType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Effect")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ForFamilia")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("ForMemey")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("TransferTo")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("OperationTypes");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Active = true,
+                            Effect = 1,
+                            ForFamilia = true,
+                            ForMemey = true,
+                            Kind = 1,
+                            Name = "Ingreso"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Active = true,
+                            Effect = -1,
+                            ForFamilia = true,
+                            ForMemey = true,
+                            Kind = 1,
+                            Name = "Gasto"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Active = true,
+                            Effect = -1,
+                            ForFamilia = true,
+                            ForMemey = true,
+                            Kind = 2,
+                            Name = "Pago tarjeta"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Active = true,
+                            Effect = -1,
+                            ForFamilia = true,
+                            ForMemey = false,
+                            Kind = 1,
+                            Name = "Cuota auto"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Active = true,
+                            Effect = -1,
+                            ForFamilia = true,
+                            ForMemey = true,
+                            Kind = 4,
+                            Name = "Ahorro"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Active = true,
+                            Effect = -1,
+                            ForFamilia = true,
+                            ForMemey = false,
+                            Kind = 3,
+                            Name = "Aporte a Memey",
+                            TransferTo = 2
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Active = true,
+                            Effect = -1,
+                            ForFamilia = false,
+                            ForMemey = true,
+                            Kind = 3,
+                            Name = "Retiro de Memey",
+                            TransferTo = 1
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Active = true,
+                            Effect = -1,
+                            ForFamilia = true,
+                            ForMemey = true,
+                            Kind = 5,
+                            Name = "Inversión"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Active = true,
+                            Effect = 1,
+                            ForFamilia = true,
+                            ForMemey = true,
+                            Kind = 4,
+                            Name = "Retiro de ahorro"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Active = true,
+                            Effect = 1,
+                            ForFamilia = true,
+                            ForMemey = true,
+                            Kind = 5,
+                            Name = "Rescate de inversión"
+                        });
+                });
+
             modelBuilder.Entity("Finanzas.Domain.PaymentMethod", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Active")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("CashBoxId")
@@ -201,6 +373,7 @@ namespace Finanzas.Infrastructure.Migrations
                         new
                         {
                             Id = 1,
+                            Active = true,
                             CashBoxId = 1,
                             Name = "Débito / transferencia",
                             OpeningCardDebt = 0L,
@@ -209,6 +382,7 @@ namespace Finanzas.Infrastructure.Migrations
                         new
                         {
                             Id = 2,
+                            Active = true,
                             CashBoxId = 1,
                             Name = "Efectivo",
                             OpeningCardDebt = 0L,
@@ -217,6 +391,7 @@ namespace Finanzas.Infrastructure.Migrations
                         new
                         {
                             Id = 3,
+                            Active = true,
                             CashBoxId = 2,
                             Name = "Memey Mercado Pago",
                             OpeningCardDebt = 0L,
@@ -225,6 +400,7 @@ namespace Finanzas.Infrastructure.Migrations
                         new
                         {
                             Id = 4,
+                            Active = true,
                             CashBoxId = 1,
                             Name = "Visa Santander",
                             OpeningCardDebt = 0L,
@@ -233,6 +409,7 @@ namespace Finanzas.Infrastructure.Migrations
                         new
                         {
                             Id = 5,
+                            Active = true,
                             CashBoxId = 1,
                             Name = "Visa Galicia",
                             OpeningCardDebt = 0L,
@@ -241,6 +418,7 @@ namespace Finanzas.Infrastructure.Migrations
                         new
                         {
                             Id = 6,
+                            Active = true,
                             CashBoxId = 1,
                             Name = "Master Galicia",
                             OpeningCardDebt = 0L,
@@ -249,6 +427,7 @@ namespace Finanzas.Infrastructure.Migrations
                         new
                         {
                             Id = 7,
+                            Active = true,
                             CashBoxId = 1,
                             Name = "Tarjeta Mercado Pago",
                             OpeningCardDebt = 0L,
@@ -307,7 +486,7 @@ namespace Finanzas.Infrastructure.Migrations
                     b.Property<DateOnly?>("EndMonth")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Operation")
+                    b.Property<int>("OperationTypeId")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("PaymentMethodId")
@@ -323,6 +502,8 @@ namespace Finanzas.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OperationTypeId");
 
                     b.ToTable("RecurringRules");
                 });
@@ -444,7 +625,7 @@ namespace Finanzas.Infrastructure.Migrations
                     b.Property<bool>("IsPriorCommitment")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("Operation")
+                    b.Property<int>("OperationTypeId")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("PaidCardId")
@@ -472,6 +653,8 @@ namespace Finanzas.Infrastructure.Migrations
                     b.HasIndex("ImportId")
                         .IsUnique();
 
+                    b.HasIndex("OperationTypeId");
+
                     b.ToTable("Transactions");
                 });
 
@@ -493,6 +676,17 @@ namespace Finanzas.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Finanzas.Domain.RecurringRule", b =>
+                {
+                    b.HasOne("Finanzas.Domain.OperationType", "OperationType")
+                        .WithMany()
+                        .HasForeignKey("OperationTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OperationType");
+                });
+
             modelBuilder.Entity("Finanzas.Domain.RecurringRuleAmount", b =>
                 {
                     b.HasOne("Finanzas.Domain.RecurringRule", null)
@@ -500,6 +694,17 @@ namespace Finanzas.Infrastructure.Migrations
                         .HasForeignKey("RecurringRuleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Finanzas.Domain.Transaction", b =>
+                {
+                    b.HasOne("Finanzas.Domain.OperationType", "OperationType")
+                        .WithMany()
+                        .HasForeignKey("OperationTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OperationType");
                 });
 
             modelBuilder.Entity("Finanzas.Domain.PaymentMethod", b =>

@@ -87,11 +87,14 @@ public class PlanillaOctubreTests : IClassFixture<PlanillaOctubreTests.Api>
     [Fact]
     public async Task November_card_payments_include_prior_installments_new_purchases_and_school()
     {
-        var d = await Get("/dashboard?scope=total&date=2026-10-08");
-        var nov = d.GetProperty("cardPayments").EnumerateArray().First(p => p.GetProperty("dueDate").GetString() == "2026-11-11");
+        // Sin vista total: el resumen de cada tarjeta se reparte entre Familia y Memey según quién compró.
+        decimal Nov(JsonElement d) => d.GetProperty("cardPayments").EnumerateArray()
+            .Where(p => p.GetProperty("dueDate").GetString() == "2026-11-11").Sum(p => Num(p, "total"));
+        var familia = Nov(await Get("/dashboard?scope=familia&date=2026-10-08"));
+        var memey = Nov(await Get("/dashboard?scope=memey&date=2026-10-08"));
         // Tarjetas: noviembre anterior $878.986 + nuevo $247.950 + Educación $1.654.000 (consumo del 20/10).
         // La planilla muestra las cuotas anteriores redondeadas; sumadas tal como se ven dan $878.988, de ahí los $2.
-        Assert.Equal(2_780_938.04m, Num(nov, "total"));
+        Assert.Equal(2_780_938.04m, familia + memey);
     }
 
     [Fact]
@@ -135,7 +138,6 @@ public class PlanillaOctubreTests : IClassFixture<PlanillaOctubreTests.Api>
     [Theory]
     [InlineData("familia")]
     [InlineData("memey")]
-    [InlineData("total")]
     public async Task Cash_flow_running_balance_lands_on_the_dashboard_figures(string scope)
     {
         var d = await Get($"/dashboard?scope={scope}&date=2026-10-08");

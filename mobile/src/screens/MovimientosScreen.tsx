@@ -5,10 +5,11 @@ import {
   useCategories,
   useConfirmTransaction,
   useDeleteTransaction,
+  useOperationTypes,
   usePaymentMethods,
   useTransactions,
 } from '../api/endpoints';
-import { OPERATION_LABELS, SCOPE_LABELS, type CashFlowLine, type Id, type Transaction } from '../api/types';
+import type { CashFlowLine, Id, OperationType, Transaction } from '../api/types';
 import { MoneyText } from '../components/MoneyText';
 import { QueryState } from '../components/QueryState';
 import { ScopeSelector } from '../components/ScopeSelector';
@@ -36,6 +37,7 @@ export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
   const q = useTransactions({ scope, from: `${month}-01`, to: endOfMonth(month) });
   const categories = useCategories();
   const methods = usePaymentMethods();
+  const types = useOperationTypes();
   const confirm = useConfirmTransaction();
   const remove = useDeleteTransaction();
 
@@ -43,9 +45,10 @@ export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
     id === null ? '' : (categories.data?.find((c) => c.id === id)?.name ?? '');
   const methodName = (id: Id | null | undefined) =>
     id == null ? '' : (methods.data?.find((m) => m.id === id)?.name ?? '');
+  const typeOf = (id: Id | null | undefined) => (id == null ? undefined : types.data?.find((t) => t.id === id));
 
   const askDelete = (t: Transaction) =>
-    Alert.alert('Borrar movimiento', `¿Borrar "${t.description || OPERATION_LABELS[t.operation]}"?`, [
+    Alert.alert('Borrar movimiento', `¿Borrar "${t.description || typeOf(t.operationTypeId)?.name || 'movimiento'}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Borrar',
@@ -59,7 +62,8 @@ export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
 
   const renderItem = ({ item }: { item: Transaction }) => {
     const previsto = item.status === 'previsto';
-    const label = OPERATION_LABELS[item.operation];
+    const type = typeOf(item.operationTypeId);
+    const label = type?.name ?? '';
     return (
       <Pressable
         onLongPress={() => askDelete(item)}
@@ -72,7 +76,7 @@ export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
           </Text>
           <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
             {formatDate(item.date)} · {label}
-            {item.operation === 'pagoTarjeta' && methodName(item.paidCardId) ? ` ${methodName(item.paidCardId)}` : ''}
+            {type?.kind === 'pagoTarjeta' && methodName(item.paidCardId) ? ` ${methodName(item.paidCardId)}` : ''}
             {categoryName(item.categoryId) ? ` · ${categoryName(item.categoryId)}` : ''}
             {item.installments > 1 ? ` · ${item.installments} cuotas` : ''}
           </Text>
@@ -109,7 +113,13 @@ export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
         />
       </View>
       {vista === 'caja' ? (
-        <FlujoDeCaja marca={marca?.marca ?? 'corte'} nonce={marca?.n} methodName={methodName} categoryName={categoryName} />
+        <FlujoDeCaja
+          marca={marca?.marca ?? 'corte'}
+          nonce={marca?.n}
+          methodName={methodName}
+          categoryName={categoryName}
+          typeOf={typeOf}
+        />
       ) : (
         <QueryState
           isLoading={q.isLoading}
@@ -145,11 +155,13 @@ function FlujoDeCaja({
   nonce,
   methodName,
   categoryName,
+  typeOf,
 }: {
   marca: 'corte' | 'finDeMes';
   nonce?: number;
   methodName: (id: Id | null | undefined) => string;
   categoryName: (id: Id | null) => string;
+  typeOf: (id: Id | null | undefined) => OperationType | undefined;
 }) {
   const { scope, cutoff } = useScope();
   const { colors } = useTheme();
@@ -184,9 +196,9 @@ function FlujoDeCaja({
     if (l.kind === 'resumenTarjeta') partes.push('vencimiento sin pagar');
     else if (l.kind === 'gastoEstimado') partes.push('presupuesto no cubierto por fijos');
     else {
-      if (l.operation) partes.push(OPERATION_LABELS[l.operation]);
+      const type = typeOf(l.operationTypeId);
+      if (type) partes.push(type.name);
       if (l.categoryId != null && categoryName(l.categoryId)) partes.push(categoryName(l.categoryId));
-      if (scope === 'total' && l.scope) partes.push(SCOPE_LABELS[l.scope]);
       if (l.status === 'previsto') partes.push('previsto');
     }
     return partes.join(' · ');
@@ -215,7 +227,7 @@ function FlujoDeCaja({
     const l = item.linea;
     const title =
       l.kind === 'movimiento'
-        ? l.description || (l.operation ? OPERATION_LABELS[l.operation] : '')
+        ? l.description || (typeOf(l.operationTypeId)?.name ?? '')
         : l.description;
     return (
       <View
@@ -227,7 +239,7 @@ function FlujoDeCaja({
         <View style={{ flex: 1 }}>
           <Text style={{ color: colors.ink, fontWeight: '600' }} numberOfLines={1}>
             {title}
-            {l.kind === 'movimiento' && l.operation === 'pagoTarjeta' && methodName(l.paidCardId) ? ` ${methodName(l.paidCardId)}` : ''}
+            {l.kind === 'movimiento' && typeOf(l.operationTypeId)?.kind === 'pagoTarjeta' && methodName(l.paidCardId) ? ` ${methodName(l.paidCardId)}` : ''}
           </Text>
           <Text style={{ color: colors.inkMuted, fontSize: 12 }} numberOfLines={1}>
             {detalle(l)}

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useDashboard } from '../api/endpoints';
+import { useDashboard, useSavings } from '../api/endpoints';
 import { Card } from '../components/Card';
 import { CutoffControl } from '../components/CutoffControl';
 import { MoneyText } from '../components/MoneyText';
@@ -17,10 +17,17 @@ export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
   const { colors } = useTheme();
   const accent = scopeColor(colors, scope);
   const q = useDashboard(scope, cutoff);
+  const savings = useSavings(scope, cutoff);
   const d = q.data;
 
   return (
-    <Screen refreshing={q.isRefetching} onRefresh={q.refetch}>
+    <Screen
+      refreshing={q.isRefetching}
+      onRefresh={() => {
+        q.refetch();
+        savings.refetch();
+      }}
+    >
       <ScopeSelector />
       <CutoffControl />
 
@@ -85,6 +92,21 @@ export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
                 </View>
               </Card>
             </Pressable>
+
+            {savings.data && (
+              <Pressable onPress={() => navigation.navigate('Ahorro')} accessibilityHint="Abre ahorro e inversiones">
+                <Card title="Ahorro e inversión" accent={accent} right={<Chevron color={colors.inkMuted} />}>
+                  <View style={styles.line}>
+                    <Text style={{ color: colors.ink }}>Ahorro</Text>
+                    <MoneyText value={savings.data.ahorro.balance} size="sm" />
+                  </View>
+                  <View style={styles.line}>
+                    <Text style={{ color: colors.ink }}>Inversiones</Text>
+                    <MoneyText value={savings.data.inversion.marketValue ?? savings.data.inversion.balance} size="sm" />
+                  </View>
+                </Card>
+              </Pressable>
+            )}
 
             <Card
               title="Pagos de tarjeta"
