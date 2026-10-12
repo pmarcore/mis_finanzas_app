@@ -192,12 +192,46 @@ export interface Dashboard {
   scope: ScopeView;
   cashNow: number;
   projectedEndOfMonth: number;
-  freeCash: number;
   quarter: { month: Month; balance: number }[];
   estimatedMonthlySpend: { month: Month; amount: number }[];
   memey: { cashNow: number; projectedEndOfMonth: number };
   cardPayments: CardPayment[];
-  alerts: string[];
+}
+
+/**
+ * Línea de GET /cashflow. `movimiento` trae el movimiento; `resumenTarjeta` es lo que falta pagar de un resumen
+ * (las compras con tarjeta impactan en caja en su vencimiento); `gastoEstimado` es el presupuesto no cubierto por fijos.
+ */
+export interface CashFlowLine {
+  date: ISODate;
+  kind: 'movimiento' | 'resumenTarjeta' | 'gastoEstimado';
+  transactionId: Id | null;
+  scope: Scope | null;
+  operation: Operation | null;
+  categoryId: Id | null;
+  status: TransactionStatus | null;
+  /** Tarjeta del resumen pendiente (`resumenTarjeta`). */
+  cardId: Id | null;
+  /** Tarjeta que paga un movimiento `pagoTarjeta`. */
+  paidCardId: Id | null;
+  description: string;
+  amount: number;
+  /** Saldo acumulado después de esta línea. */
+  balance: number;
+  /** false: realizado hasta el corte (cuenta en la caja actual); true: después del corte, hasta `until`. */
+  pending: boolean;
+}
+
+/** Flujo de caja del mes del corte. `cashNow` = caja actual del dashboard; `projected` = caja a fin de mes. */
+export interface CashFlow {
+  scope: ScopeView;
+  from: ISODate;
+  cutoff: ISODate;
+  until: ISODate;
+  opening: number;
+  cashNow: number;
+  projected: number;
+  lines: CashFlowLine[];
 }
 
 export type BudgetAlert = 'Normal' | 'Preventiva' | 'Control' | 'Excedido' | 'Critico' | 'Proyecta exceso';

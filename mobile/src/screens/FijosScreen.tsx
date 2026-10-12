@@ -28,6 +28,7 @@ import { QueryState } from '../components/QueryState';
 import { ScopeSelector } from '../components/ScopeSelector';
 import { Screen } from '../components/Screen';
 import { Segmented } from '../components/Segmented';
+import { Select } from '../components/Select';
 import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
 import { amountToInput, formatMonth, isValidMonth, monthOf, parseAmount, todayISO } from '../utils/format';
@@ -143,8 +144,9 @@ function RuleForm({
           ]}
         />
       </Field>
-      <Field label="Operación">
-        <ChipPicker
+      <Field label="Tipo de movimiento">
+        <Select
+          title="Tipo de movimiento"
           items={operations}
           getKey={(o) => o}
           getLabel={(o) => OPERATION_LABELS[o]}
@@ -164,7 +166,9 @@ function RuleForm({
         />
       </Field>
       <Field label="Categoría" error={show(errors.category)}>
-        <ChipPicker
+        <Select
+          title="Categoría"
+          placeholder="Elegí una categoría"
           items={visibleCategories}
           getKey={(c) => c.id}
           getLabel={(c) => c.name}
@@ -174,7 +178,9 @@ function RuleForm({
         />
       </Field>
       <Field label="Medio de pago" error={show(errors.paymentMethod)}>
-        <ChipPicker
+        <Select
+          title="Medio de pago"
+          placeholder="Elegí un medio de pago"
           items={methods.data ?? []}
           getKey={(m) => m.id}
           getLabel={(m) => m.name}

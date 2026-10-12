@@ -23,6 +23,7 @@ app.MapOpenApi();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapDashboard();
+app.MapCashFlow();
 app.MapTransactions();
 app.MapCards();
 app.MapRecurringRules();

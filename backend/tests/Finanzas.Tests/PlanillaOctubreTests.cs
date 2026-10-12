@@ -131,4 +131,26 @@ public class PlanillaOctubreTests : IClassFixture<PlanillaOctubreTests.Api>
         Assert.Equal("2026-11", est.GetProperty("month").GetString());
         Assert.Equal(2_705_000m, Num(est, "amount"));
     }
+
+    [Theory]
+    [InlineData("familia")]
+    [InlineData("memey")]
+    [InlineData("total")]
+    public async Task Cash_flow_running_balance_lands_on_the_dashboard_figures(string scope)
+    {
+        var d = await Get($"/dashboard?scope={scope}&date=2026-10-08");
+        var f = await Get($"/cashflow?scope={scope}&date=2026-10-08");
+        var lines = f.GetProperty("lines").EnumerateArray().ToList();
+
+        Assert.Equal(Num(d, "cashNow"), Num(f, "cashNow"));
+        Assert.Equal(Num(d, "projectedEndOfMonth"), Num(f, "projected"));
+        var done = lines.Where(l => !l.GetProperty("pending").GetBoolean()).ToList();
+        Assert.Equal(Num(d, "cashNow"), done.Count > 0 ? Num(done[^1], "balance") : Num(f, "opening"));
+        Assert.Equal(Num(d, "projectedEndOfMonth"), Num(lines[^1], "balance"));
+        Assert.Equal(Num(f, "opening") + lines.Sum(l => Num(l, "amount")), Num(f, "projected"));
+
+        // Hasta fin de noviembre coincide con la proyección trimestral (incluye el gasto estimado del presupuesto).
+        var nov = await Get($"/cashflow?scope={scope}&date=2026-10-08&until=2026-11-30");
+        Assert.Equal(Num(d.GetProperty("quarter")[1], "balance"), Num(nov, "projected"));
+    }
 }

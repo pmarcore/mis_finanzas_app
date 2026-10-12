@@ -6,28 +6,93 @@ namespace Finanzas.Api;
 
 public static class Endpoints
 {
-    static readonly System.Globalization.CultureInfo EsAr = new("es-AR");
-
     // La fecha de corte no se guarda: si no viene, es hoy.
     public static DateOnly Today() => DateOnly.FromDateTime(DateTime.Now);
 
     /// <summary>"familia" o "memey"; "total" o vacío es la suma de ambos (null).</summary>
     public static Scope? ParseScope(string? s) => s?.ToLowerInvariant() switch { "familia" => Scope.Familia, "memey" => Scope.Memey, _ => null };
 
+    static Task<Dictionary<int, string>> CardNames(FinanzasDbContext db) =>
+        db.PaymentMethods.Where(m => m.Type == PaymentMethodType.Tarjeta).ToDictionaryAsync(m => m.Id, m => m.Name);
+
+    /// <summary>Calculadora de caja con el gasto estimado del presupuesto familiar, igual para el dashboard y el flujo de caja.</summary>
+    static async Task<(CashFlowCalculator Calc, List<BudgetEstimate> Estimates)> Calculator(
+        FinanzasDbContext db, List<Category> categories, List<Budget> budgets, List<Transaction> transactions, DateOnly cutoff, DateOnly horizon)
+    {
+        var rules = await db.RecurringRules.Include(r => r.Amounts).ToListAsync();
+        var estimates = Budgeting.MonthlyEstimates(categories, budgets, rules, Scope.Familia, cutoff, horizon);
+        return (new CashFlowCalculator(await db.CashBoxes.ToListAsync(), transactions, await db.Statements.ToListAsync(), estimates), estimates);
+    }
+
+    /// <summary>
+    /// Flujo de caja del mes del corte con saldo acumulado. El saldo en la línea de corte es la caja actual del dashboard
+    /// y el saldo al final ('until', por defecto fin de mes) es la caja a fin de mes.
+    /// </summary>
+    public static void MapCashFlow(this WebApplication app) => app.MapGet("/cashflow", async (string? scope, DateOnly? date, DateOnly? until, FinanzasDbContext db) =>
+    {
+        var cutoff = date ?? Today();
+        var end = until ?? Months.EndOf(cutoff);
+        if (end < cutoff) return Results.BadRequest("'until' no puede ser anterior a la fecha de corte.");
+        var sc = ParseScope(scope);
+        var transactions = await db.Transactions.Include(t => t.Impacts).ToListAsync();
+        var cards = await CardNames(db);
+        var (calc, _) = await Calculator(db, await db.Categories.ToListAsync(), await db.Budgets.ToListAsync(), transactions, cutoff, end);
+        var ledger = calc.Ledger(sc, cutoff, end);
+
+        var balance = ledger.Opening;
+        object Line(CashLedgerLine l, bool pending)
+        {
+            balance += l.Amount;
+            var t = l.Transaction;
+            var kind = t is not null ? "movimiento" : l.CardId is not null ? "resumenTarjeta" : "gastoEstimado";
+            var description = t is not null ? t.Description
+                : l.CardId is { } c ? $"Resumen {cards.GetValueOrDefault(c, "tarjeta")}"
+                : "Gasto estimado del presupuesto";
+            return new
+            {
+                date = l.Date,
+                kind,
+                transactionId = t?.Id,
+                scope = t?.Scope,
+                operation = t?.Operation,
+                categoryId = t?.CategoryId,
+                status = t?.Status,
+                cardId = l.CardId,
+                paidCardId = t?.PaidCardId,
+                description,
+                amount = Money.Pesos(l.Amount),
+                balance = Money.Pesos(balance),
+                pending,
+            };
+        }
+        var done = ledger.Done.Select(l => Line(l, false)).ToList();
+        var cashNow = balance;
+        var pending = ledger.Pending.Select(l => Line(l, true)).ToList();
+
+        return Results.Ok(new
+        {
+            scope = sc?.ToString().ToLowerInvariant() ?? "total",
+            from = ledger.From,
+            cutoff,
+            until = end,
+            opening = Money.Pesos(ledger.Opening),
+            cashNow = Money.Pesos(cashNow),
+            projected = Money.Pesos(balance),
+            lines = done.Concat(pending),
+        });
+    });
+
     public static void MapDashboard(this WebApplication app) => app.MapGet("/dashboard", async (string? scope, DateOnly? date, FinanzasDbContext db) =>
     {
         var cutoff = date ?? Today();
         var sc = ParseScope(scope);
-        var settings = await db.Settings.FirstAsync();
         var categories = await db.Categories.ToListAsync();
         var budgets = await db.Budgets.ToListAsync();
-        var rules = await db.RecurringRules.Include(r => r.Amounts).ToListAsync();
         var transactions = await db.Transactions.Include(t => t.Impacts).ToListAsync();
-        var cards = await db.PaymentMethods.Where(m => m.Type == PaymentMethodType.Tarjeta).ToDictionaryAsync(m => m.Id, m => m.Name);
+        var cards = await CardNames(db);
 
         var horizon = Months.EndOf(cutoff.AddMonths(5));
-        var estimates = Budgeting.MonthlyEstimates(categories, budgets, rules, Scope.Familia, cutoff, horizon);
-        var calc = new CashFlowCalculator(await db.CashBoxes.ToListAsync(), transactions, await db.Statements.ToListAsync(), estimates);
+        var (calc, estimates) = await Calculator(db, categories, budgets, transactions, cutoff, horizon);
 
         var endOfMonth = Months.EndOf(cutoff);
         var projectedEom = calc.ProjectedAt(sc, cutoff, endOfMonth);
@@ -48,13 +113,6 @@ public static class Endpoints
             })
             .ToList();
 
-        var alerts = new List<string>();
-        foreach (var q in quarter.Where(q => q.balance < settings.CashFloor))
-            alerts.Add(string.Create(EsAr, $"La caja proyectada a fin de {q.month} (${Money.Pesos(q.balance):N0}) queda debajo del piso de ${Money.Pesos(settings.CashFloor):N0}."));
-        if (sc is not Scope.Memey)
-            alerts.AddRange(Budgeting.Report(categories, budgets, transactions, Scope.Familia, cutoff, cutoff, settings)
-                .Where(r => r.Alert != "Normal")
-                .Select(r => string.Create(EsAr, $"{r.Category.Name}: {r.Alert} ({r.UsePct:0.#}% usado)")));
 
         return Results.Ok(new
         {
@@ -62,7 +120,6 @@ public static class Endpoints
             scope = sc?.ToString().ToLowerInvariant() ?? "total",
             cashNow = Money.Pesos(calc.CashAt(sc, cutoff)),
             projectedEndOfMonth = Money.Pesos(projectedEom),
-            freeCash = Money.Pesos(projectedEom - calc.CommittedCardInstallmentsAfter(sc, endOfMonth)),
             quarter = quarter.Select(q => new { q.month, balance = Money.Pesos(q.balance) }),
             estimatedMonthlySpend = estimates.Select(e => new { month = Months.Format(e.Date), amount = Money.Pesos(e.Amount) }),
             memey = new
@@ -71,7 +128,6 @@ public static class Endpoints
                 projectedEndOfMonth = Money.Pesos(calc.ProjectedAt(Scope.Memey, cutoff, endOfMonth)),
             },
             cardPayments,
-            alerts,
         });
     });
 

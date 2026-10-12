@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useDashboard } from '../api/endpoints';
 import { Card } from '../components/Card';
@@ -12,7 +13,7 @@ import { scopeColor, spacing, useTheme } from '../theme';
 import { formatARS, formatDate, formatMonth } from '../utils/format';
 
 export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
-  const { scope, cutoff } = useScope();
+  const { scope, setScope, cutoff } = useScope();
   const { colors } = useTheme();
   const accent = scopeColor(colors, scope);
   const q = useDashboard(scope, cutoff);
@@ -26,29 +27,26 @@ export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
       <QueryState isLoading={q.isLoading} error={q.error} onRetry={q.refetch}>
         {d && (
           <>
-            {d.alerts.length > 0 && (
-              <Card title="Alertas" accent={colors.warn}>
-                {d.alerts.map((a, i) => (
-                  <Text key={i} style={{ color: colors.ink }}>
-                    • {a}
-                  </Text>
-                ))}
-              </Card>
-            )}
-
             <View style={styles.grid}>
-              <Card title="Caja actual" accent={accent} style={styles.half}>
-                <MoneyText value={d.cashNow} size="lg" />
-              </Card>
-              <Card title="Fin de mes" accent={accent} style={styles.half}>
-                <MoneyText value={d.projectedEndOfMonth} size="lg" />
-              </Card>
+              <Pressable
+                style={styles.half}
+                onPress={() => navigation.navigate('Movimientos', { vista: 'caja', marca: 'corte', n: Date.now() })}
+                accessibilityHint="Abre el flujo de caja marcando el corte"
+              >
+                <Card title="Caja actual" accent={accent} right={<Chevron color={colors.inkMuted} />}>
+                  <MoneyText value={d.cashNow} size="lg" />
+                </Card>
+              </Pressable>
+              <Pressable
+                style={styles.half}
+                onPress={() => navigation.navigate('Movimientos', { vista: 'caja', marca: 'finDeMes', n: Date.now() })}
+                accessibilityHint="Abre el flujo de caja hasta fin de mes"
+              >
+                <Card title="Fin de mes" accent={accent} right={<Chevron color={colors.inkMuted} />}>
+                  <MoneyText value={d.projectedEndOfMonth} size="lg" />
+                </Card>
+              </Pressable>
             </View>
-
-            <Card title="Caja libre" accent={accent}>
-              <MoneyText value={d.freeCash} size="xl" />
-              <Text style={{ color: colors.inkMuted, fontSize: 12 }}>Proyección por encima del piso de caja</Text>
-            </Card>
 
             <Card title="Proyección trimestral" accent={accent}>
               {d.quarter.map((m) => {
@@ -69,16 +67,24 @@ export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
               })}
             </Card>
 
-            <Card title="Caja Memey" accent={colors.memey}>
-              <View style={styles.line}>
-                <Text style={{ color: colors.ink }}>Actual</Text>
-                <MoneyText value={d.memey.cashNow} size="sm" />
-              </View>
-              <View style={styles.line}>
-                <Text style={{ color: colors.ink }}>Fin de mes</Text>
-                <MoneyText value={d.memey.projectedEndOfMonth} size="sm" />
-              </View>
-            </Card>
+            <Pressable
+              onPress={() => {
+                setScope('memey');
+                navigation.navigate('Movimientos', { vista: 'lista' });
+              }}
+              accessibilityHint="Abre los movimientos de Memey"
+            >
+              <Card title="Caja Memey" accent={colors.memey} right={<Chevron color={colors.inkMuted} />}>
+                <View style={styles.line}>
+                  <Text style={{ color: colors.ink }}>Actual</Text>
+                  <MoneyText value={d.memey.cashNow} size="sm" />
+                </View>
+                <View style={styles.line}>
+                  <Text style={{ color: colors.ink }}>Fin de mes</Text>
+                  <MoneyText value={d.memey.projectedEndOfMonth} size="sm" />
+                </View>
+              </Card>
+            </Pressable>
 
             <Card
               title="Pagos de tarjeta"
@@ -116,6 +122,10 @@ export function InicioScreen({ navigation }: TabScreenProps<'Inicio'>) {
       </QueryState>
     </Screen>
   );
+}
+
+function Chevron({ color }: { color: string }) {
+  return <Ionicons name="chevron-forward" size={16} color={color} />;
 }
 
 const styles = StyleSheet.create({

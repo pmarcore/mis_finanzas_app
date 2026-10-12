@@ -25,6 +25,7 @@ import { ChipPicker } from '../components/ChipPicker';
 import { DateInput, Field, Input } from '../components/Field';
 import { Screen } from '../components/Screen';
 import { Segmented } from '../components/Segmented';
+import { Select } from '../components/Select';
 import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
@@ -163,18 +164,18 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
 
   return (
     <Screen>
-      <Field label="Operación">
-        <ChipPicker
-          items={[...OPERATIONS]}
-          getKey={(o) => o}
-          getLabel={(o) => OPERATION_LABELS[o]}
-          selectedKey={operation}
-          onSelect={setOperation}
-          accent={accent}
-        />
-      </Field>
-
       <Card>
+        <Field label="Tipo de movimiento">
+          <Select
+            title="Tipo de movimiento"
+            items={[...OPERATIONS]}
+            getKey={(o) => o}
+            getLabel={(o) => OPERATION_LABELS[o]}
+            selectedKey={operation}
+            onSelect={setOperation}
+            accent={accent}
+          />
+        </Field>
         <Field label="Monto" error={show(errors.amount)}>
           <Input value={amountText} onChangeText={setAmountText} placeholder="$ 0" keyboardType="decimal-pad" />
         </Field>
@@ -219,19 +220,24 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
             label={needsCategory ? 'Categoría' : 'Categoría (opcional)'}
             error={show(errors.category)}
           >
-            <ChipPicker
+            <Select
+              title="Categoría"
+              placeholder="Elegí una categoría"
               items={visibleCategories}
               getKey={(c) => c.id}
               getLabel={(c) => c.name}
               selectedKey={categoryId}
-              // Tocar la elegida la deselecciona (sólo cuando es opcional).
-              onSelect={(c) => setCategoryId(!needsCategory && c.id === categoryId ? undefined : c.id)}
+              onSelect={(c) => setCategoryId(c.id)}
+              clearLabel={needsCategory ? undefined : 'Sin categoría'}
+              onClear={() => setCategoryId(undefined)}
               accent={accent}
             />
           </Field>
         )}
         <Field label={isCardPayment ? 'Pagás desde' : 'Medio de pago'} error={show(errors.paymentMethod)}>
-          <ChipPicker
+          <Select
+            title={isCardPayment ? 'Pagás desde' : 'Medio de pago'}
+            placeholder="Elegí un medio de pago"
             items={visibleMethods}
             getKey={(m) => m.id}
             getLabel={(m) => m.name}
@@ -245,7 +251,9 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
       {isCardPayment && (
         <Card title="Tarjeta que pagás" accent={accent}>
           <Field label="Tarjeta" error={show(errors.paidCard)}>
-            <ChipPicker
+            <Select
+              title="Tarjeta que pagás"
+              placeholder="Elegí la tarjeta"
               items={cards}
               getKey={(c) => c.id}
               getLabel={(c) => c.name}
