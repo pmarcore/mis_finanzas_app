@@ -7,9 +7,10 @@ public record BudgetRow(Category Category, long Budget, long Actual, long Availa
 
 public static class Budgeting
 {
-    /// <summary>Lo que cuenta como consumo del presupuesto: gastos y cuota del auto realizados, con tarjeta el día de la compra.</summary>
+    /// <summary>Lo que cuenta como consumo del presupuesto: movimientos que restan de caja (gastos, cuota del auto) realizados,
+    /// con tarjeta el día de la compra. Ahorro, inversión, transferencias y pagos de tarjeta no consumen.</summary>
     public static bool ConsumesBudget(Transaction t) =>
-        t.Operation is Operation.Gasto or Operation.CuotaAuto && t.Status == TransactionStatus.Realizado && !t.IsPriorCommitment;
+        t.OperationType.IsExpense && t.Status == TransactionStatus.Realizado && !t.IsPriorCommitment;
 
     /// <summary>Presupuesto vigente de un mes: el del mes o, si no se cargó, el último mes anterior cargado.</summary>
     public static IReadOnlyList<Budget> BudgetsFor(IEnumerable<Budget> budgets, DateOnly month)
@@ -75,7 +76,7 @@ public static class Budgeting
         for (var m = new DateOnly(cutoff.Year, cutoff.Month, 1).AddMonths(1); m <= until; m = m.AddMonths(1))
         {
             var covered = rules
-                .Where(r => r.Scope == scope && r.Operation is Operation.Gasto or Operation.CuotaAuto && r.StartMonth <= m && (r.EndMonth is null || r.EndMonth >= m))
+                .Where(r => r.Scope == scope && r.OperationType.IsExpense && r.StartMonth <= m && (r.EndMonth is null || r.EndMonth >= m))
                 .GroupBy(r => r.CategoryId)
                 .ToDictionary(g => g.Key, g => g.Sum(r => RecurringRuleExpander.AmountFor(r, m)));
             var amount = BudgetsFor(budgets, m)

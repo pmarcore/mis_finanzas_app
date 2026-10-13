@@ -1,5 +1,5 @@
 import { useColorScheme } from 'react-native';
-import type { ScopeView } from './api/types';
+import type { Scope } from './api/types';
 
 export interface Palette {
   familia: string;
@@ -49,9 +49,7 @@ export function useTheme() {
   return { dark, colors: dark ? darkColors : lightColors };
 }
 
-/** Color de acento para la vista seleccionada ('total' usa el tono de tinta). */
-export function scopeColor(colors: Palette, scope: ScopeView): string {
-  if (scope === 'familia') return colors.familia;
-  if (scope === 'memey') return colors.memey;
-  return colors.ink;
+/** Color de acento del ámbito. */
+export function scopeColor(colors: Palette, scope: Scope): string {
+  return scope === 'memey' ? colors.memey : colors.familia;
 }

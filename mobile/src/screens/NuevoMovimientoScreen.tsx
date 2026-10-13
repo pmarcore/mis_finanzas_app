@@ -5,18 +5,18 @@ import {
   useCardDueDate,
   useCategories,
   useCreateTransaction,
+  useOperationTypes,
   usePaymentMethods,
   usePeople,
 } from '../api/endpoints';
 import {
-  OPERATION_LABELS,
-  OPERATIONS,
+  SCOPE_LABELS,
   STATUS_LABELS,
   type CategoryKind,
   type Id,
   type ISODate,
   type NewTransaction,
-  type Operation,
+  type OperationType,
   type Scope,
   type TransactionStatus,
 } from '../api/types';
@@ -31,8 +31,10 @@ import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
 import { addMonths, formatDate, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
 
-/** Operaciones que necesitan categoría; en el resto es opcional. */
-const NEEDS_CATEGORY: Operation[] = ['ingreso', 'gasto'];
+/** Tipo propuesto al abrir o al cambiar de destino: el primer gasto común ofrecido, si no el primero. */
+function defaultType(types: OperationType[]): OperationType | undefined {
+  return types.find((t) => t.kind === 'movimiento' && t.effect === 'resta') ?? types[0];
+}
 
 export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const { colors } = useTheme();
@@ -41,13 +43,14 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const people = usePeople();
   const categories = useCategories();
   const paymentMethods = usePaymentMethods();
+  const operationTypes = useOperationTypes();
   const create = useCreateTransaction();
 
-  const [operation, setOperation] = useState<Operation>('gasto');
+  const [operationTypeId, setOperationTypeId] = useState<Id>();
   const [status, setStatus] = useState<TransactionStatus>('realizado');
   const [amountText, setAmountText] = useState('');
   const [description, setDescription] = useState('');
-  const [scope, setScope] = useState<Scope>(currentScope === 'memey' ? 'memey' : 'familia');
+  const [scope, setScope] = useState<Scope>(currentScope);
   const [personId, setPersonId] = useState<Id>();
   const [date, setDate] = useState<ISODate>(todayISO);
   const [categoryId, setCategoryId] = useState<Id>();
@@ -58,17 +61,28 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const [paidCardId, setPaidCardId] = useState<Id>();
   const [submitted, setSubmitted] = useState(false);
 
-  const isCardPayment = operation === 'pagoTarjeta';
-  const kind: CategoryKind = operation === 'ingreso' ? 'ingreso' : 'gasto';
-  const needsCategory = NEEDS_CATEGORY.includes(operation);
+  // Tipos configurados para el destino elegido (Configuración → Tipos de operación).
+  const offeredTypes = useMemo(
+    () => (operationTypes.data ?? []).filter((t) => t.active && t.scopes.includes(scope)),
+    [operationTypes.data, scope],
+  );
+  const type = offeredTypes.find((t) => t.id === operationTypeId);
+  useEffect(() => {
+    if (!type && offeredTypes.length > 0) setOperationTypeId(defaultType(offeredTypes)?.id);
+  }, [type, offeredTypes]);
+
+  const isCardPayment = type?.kind === 'pagoTarjeta';
+  // Solo los ingresos y gastos comunes llevan categoría y se pueden pagar con tarjeta.
+  const isCommon = type?.kind === 'movimiento';
+  const kind: CategoryKind = type?.effect === 'suma' ? 'ingreso' : 'gasto';
   const visibleCategories = useMemo(
-    () => (isCardPayment ? [] : (categories.data ?? []).filter((c) => c.kind === kind && c.scope === scope)),
-    [categories.data, kind, scope, isCardPayment],
+    () => (isCommon ? (categories.data ?? []).filter((c) => c.active && c.kind === kind && c.scope === scope) : []),
+    [categories.data, kind, scope, isCommon],
   );
   const allMethods = paymentMethods.data ?? [];
   const cards = allMethods.filter((m) => m.isCard);
-  // Un pago de tarjeta sale de una caja: no se paga con otra tarjeta.
-  const visibleMethods = isCardPayment ? allMethods.filter((m) => !m.isCard) : allMethods;
+  // Pagos de tarjeta, transferencias, ahorro e inversión salen de una caja: no se pagan con tarjeta.
+  const visibleMethods = allMethods.filter((m) => m.active && (isCommon || !m.isCard));
   const method = allMethods.find((m) => m.id === paymentMethodId);
   const isCardPurchase = !isCardPayment && !!method?.isCard;
 
@@ -84,7 +98,7 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   useEffect(() => {
     setDueEdited(false);
     setFirstDueDate('');
-  }, [paymentMethodId, date, operation, paidCardId]);
+  }, [paymentMethodId, date, operationTypeId, paidCardId]);
   useEffect(() => {
     if (isCardPurchase && !dueEdited && !firstDueDate && due.data?.firstDueDate) setFirstDueDate(due.data.firstDueDate);
   }, [isCardPurchase, dueEdited, firstDueDate, due.data?.firstDueDate]);
@@ -102,9 +116,10 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const installments = Number.parseInt(installmentsText, 10);
   const errors = {
     amount: amount === null || amount <= 0 ? 'Ingresá un monto mayor a cero.' : undefined,
+    type: type === undefined ? 'Elegí un tipo de operación.' : undefined,
     person: personId === undefined ? 'Elegí una persona.' : undefined,
     date: !isValidISODate(date) ? 'Fecha inválida (AAAA-MM-DD).' : undefined,
-    category: needsCategory && categoryId === undefined ? 'Elegí una categoría.' : undefined,
+    category: isCommon && categoryId === undefined ? 'Elegí una categoría.' : undefined,
     paymentMethod: paymentMethodId === undefined ? 'Elegí un medio de pago.' : undefined,
     installments: isCardPurchase && !(installments >= 1) ? 'Cuotas inválidas.' : undefined,
     paidCard: isCardPayment && paidCardId === undefined ? 'Elegí la tarjeta que pagás.' : undefined,
@@ -131,14 +146,14 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
 
   const onSubmit = () => {
     setSubmitted(true);
-    if (hasErrors || amount === null || personId === undefined || paymentMethodId === undefined) return;
+    if (hasErrors || amount === null || personId === undefined || paymentMethodId === undefined || !type) return;
     const tx: NewTransaction = {
       scope,
       personId,
-      operation,
+      operationTypeId: type.id,
       date,
       description: description.trim(),
-      categoryId: categoryId ?? null,
+      categoryId: isCommon ? (categoryId ?? null) : null,
       amount,
       paymentMethodId,
       installments: isCardPurchase ? installments : 1,
@@ -156,6 +171,15 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   };
 
   const accent = scopeColor(colors, scope);
+  const typeHint = !type
+    ? undefined
+    : type.kind === 'transferencia' && type.transferTo
+      ? `Sale de ${SCOPE_LABELS[type.transferTo === 'familia' ? 'memey' : 'familia']} y entra en ${SCOPE_LABELS[type.transferTo]}.`
+      : type.kind === 'ahorro' || type.kind === 'inversion'
+        ? `${type.effect === 'resta' ? 'Sale de la caja hacia' : 'Vuelve a la caja desde'} ${type.kind === 'ahorro' ? 'el ahorro' : 'las inversiones'}; no es gasto.`
+        : type.effect === 'suma'
+          ? 'Suma a la caja.'
+          : 'Resta de la caja.';
   const dueHint = due.isFetching
     ? 'Calculando según cierre de la tarjeta…'
     : due.error
@@ -165,23 +189,6 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   return (
     <Screen>
       <Card>
-        <Field label="Tipo de movimiento">
-          <Select
-            title="Tipo de movimiento"
-            items={[...OPERATIONS]}
-            getKey={(o) => o}
-            getLabel={(o) => OPERATION_LABELS[o]}
-            selectedKey={operation}
-            onSelect={setOperation}
-            accent={accent}
-          />
-        </Field>
-        <Field label="Monto" error={show(errors.amount)}>
-          <Input value={amountText} onChangeText={setAmountText} placeholder="$ 0" keyboardType="decimal-pad" />
-        </Field>
-        <Field label="Descripción">
-          <Input value={description} onChangeText={setDescription} placeholder="Ej.: supermercado" />
-        </Field>
         <Field label="Destino">
           <Segmented<Scope>
             value={scope}
@@ -191,6 +198,24 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
               { value: 'memey', label: 'Memey', color: colors.memey },
             ]}
           />
+        </Field>
+        <Field label="Tipo de movimiento" error={show(errors.type)} hint={typeHint}>
+          <Select
+            title="Tipo de movimiento"
+            placeholder="Elegí un tipo"
+            items={offeredTypes}
+            getKey={(t) => t.id}
+            getLabel={(t) => t.name}
+            selectedKey={operationTypeId}
+            onSelect={(t) => setOperationTypeId(t.id)}
+            accent={accent}
+          />
+        </Field>
+        <Field label="Monto" error={show(errors.amount)}>
+          <Input value={amountText} onChangeText={setAmountText} placeholder="$ 0" keyboardType="decimal-pad" />
+        </Field>
+        <Field label="Descripción">
+          <Input value={description} onChangeText={setDescription} placeholder="Ej.: supermercado" />
         </Field>
         <Field label="Persona" error={show(errors.person)}>
           <ChipPicker
@@ -215,11 +240,8 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
             ]}
           />
         </Field>
-        {!isCardPayment && (
-          <Field
-            label={needsCategory ? 'Categoría' : 'Categoría (opcional)'}
-            error={show(errors.category)}
-          >
+        {isCommon && (
+          <Field label="Categoría" error={show(errors.category)}>
             <Select
               title="Categoría"
               placeholder="Elegí una categoría"
@@ -228,8 +250,6 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
               getLabel={(c) => c.name}
               selectedKey={categoryId}
               onSelect={(c) => setCategoryId(c.id)}
-              clearLabel={needsCategory ? undefined : 'Sin categoría'}
-              onClear={() => setCategoryId(undefined)}
               accent={accent}
             />
           </Field>
@@ -316,7 +336,7 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
           <ActivityIndicator color={colors.surface} />
         ) : (
           <Text style={[styles.submitText, { color: colors.surface }]}>
-            Guardar {OPERATION_LABELS[operation].toLowerCase()}
+            Guardar {type ? type.name.toLowerCase() : 'movimiento'}
           </Text>
         )}
       </Pressable>

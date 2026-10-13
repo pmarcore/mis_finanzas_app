@@ -5,14 +5,18 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Pressable } from 'react-native';
 import { useScope } from '../state/scope';
 import { scopeColor, useTheme } from '../theme';
+import { AhorroScreen } from '../screens/AhorroScreen';
+import { CategoriasScreen } from '../screens/CategoriasScreen';
 import { ConfiguracionScreen } from '../screens/ConfiguracionScreen';
 import { FijosScreen } from '../screens/FijosScreen';
 import { InicioScreen } from '../screens/InicioScreen';
+import { MediosPagoScreen } from '../screens/MediosPagoScreen';
 import { MovimientosScreen } from '../screens/MovimientosScreen';
 import { NuevoMovimientoScreen } from '../screens/NuevoMovimientoScreen';
 import { PresupuestoScreen } from '../screens/PresupuestoScreen';
 import { ReporteScreen } from '../screens/ReporteScreen';
 import { TarjetasScreen } from '../screens/TarjetasScreen';
+import { TiposOperacionScreen } from '../screens/TiposOperacionScreen';
 import type { RootStackParamList, TabParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -92,6 +96,10 @@ export function RootNavigator() {
       <Stack.Screen name="Reporte" component={ReporteScreen} options={{ title: 'Presupuesto vs. real' }} />
       <Stack.Screen name="Tarjetas" component={TarjetasScreen} />
       <Stack.Screen name="Configuracion" component={ConfiguracionScreen} options={{ title: 'Configuración' }} />
+      <Stack.Screen name="TiposOperacion" component={TiposOperacionScreen} options={{ title: 'Tipos de operación' }} />
+      <Stack.Screen name="Categorias" component={CategoriasScreen} options={{ title: 'Categorías' }} />
+      <Stack.Screen name="MediosPago" component={MediosPagoScreen} options={{ title: 'Medios de pago' }} />
+      <Stack.Screen name="Ahorro" component={AhorroScreen} options={{ title: 'Ahorro e inversión' }} />
     </Stack.Navigator>
   );
 }

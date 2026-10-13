@@ -4,16 +4,23 @@ namespace Finanzas.Domain;
 
 public enum Scope { Familia = 1, Memey = 2 }
 
-public enum Operation
+/// <summary>Qué hace un tipo de operación con la plata; los tipos en sí se configuran (ver <see cref="OperationType"/>).</summary>
+public enum OperationKind
 {
-    Ingreso = 1,
-    Gasto = 2,
-    PagoTarjeta = 3,
-    CuotaAuto = 4,
-    Ahorro = 5,
-    AporteAMemey = 6,
-    RetiroDeMemey = 7,
+    /// <summary>Ingreso o gasto común: con Resta consume presupuesto de su categoría.</summary>
+    Movimiento = 1,
+    /// <summary>Paga el resumen de una tarjeta; necesita la tarjeta y el vencimiento.</summary>
+    PagoTarjeta = 2,
+    /// <summary>Pasa plata de una caja a la otra (Familia ↔ Memey).</summary>
+    Transferencia = 3,
+    /// <summary>Sale (Resta) o vuelve (Suma) de la caja a un saldo de ahorro que se ve aparte.</summary>
+    Ahorro = 4,
+    /// <summary>Igual que Ahorro, contra el saldo de inversiones (preparado para Invertir Online).</summary>
+    Inversion = 5,
 }
+
+/// <summary>Efecto sobre la caja del ámbito del movimiento.</summary>
+public enum CashEffect { Suma = 1, Resta = -1 }
 
 public enum TransactionStatus { Realizado = 1, Previsto = 2 }
 
@@ -22,6 +29,30 @@ public enum PaymentMethodType { Debito = 1, Efectivo = 2, Billetera = 3, Tarjeta
 public enum CategoryKind { Ingreso = 1, Gasto = 2 }
 
 public enum BudgetType { Fijo = 1, Variable = 2, Deuda = 3 }
+
+/// <summary>
+/// Tipo de operación configurable: en qué ámbitos se ofrece, si suma o resta de caja y qué comportamiento tiene.
+/// Los ids 1 a 7 son los tipos de la planilla y los usa la importación.
+/// </summary>
+public class OperationType
+{
+    public int Id { get; set; }
+    public required string Name { get; set; }
+    public OperationKind Kind { get; set; }
+    /// <summary>En una transferencia no se usa: sale de una caja y entra en la otra.</summary>
+    public CashEffect Effect { get; set; }
+    public bool ForFamilia { get; set; }
+    public bool ForMemey { get; set; }
+    /// <summary>Solo transferencias: caja que recibe; sale de la otra.</summary>
+    public Scope? TransferTo { get; set; }
+    /// <summary>Inactivo: no se ofrece al cargar, pero los movimientos existentes lo conservan.</summary>
+    public bool Active { get; set; } = true;
+
+    public int Sign => (int)Effect;
+    public bool AppliesTo(Scope scope) => scope == Scope.Familia ? ForFamilia : ForMemey;
+    /// <summary>Gasto que cuenta para el presupuesto de su categoría.</summary>
+    public bool IsExpense => Kind == OperationKind.Movimiento && Effect == CashEffect.Resta;
+}
 
 public class Person
 {
@@ -48,6 +79,7 @@ public class PaymentMethod
     public PaymentMethodType Type { get; set; }
     /// <summary>Caja habitual del medio. El impacto real va a la caja del ámbito del movimiento.</summary>
     public int CashBoxId { get; set; }
+    public bool Active { get; set; } = true;
     public long OpeningCardDebt { get; set; }
     public List<CardCycle> Cycles { get; set; } = [];
 
@@ -70,6 +102,7 @@ public class Category
     public Scope Scope { get; set; }
     public CategoryKind Kind { get; set; }
     public BudgetType BudgetType { get; set; }
+    public bool Active { get; set; } = true;
 }
 
 public class Transaction
@@ -77,7 +110,8 @@ public class Transaction
     public int Id { get; set; }
     public Scope Scope { get; set; }
     public int PersonId { get; set; }
-    public Operation Operation { get; set; }
+    public int OperationTypeId { get; set; }
+    public OperationType OperationType { get; set; } = null!;
     /// <summary>Fecha de compra o del hecho; define el consumo en el presupuesto.</summary>
     public DateOnly Date { get; set; }
     public required string Description { get; set; }
@@ -91,7 +125,7 @@ public class Transaction
     public DateOnly? FirstDueDate { get; set; }
     public TransactionStatus Status { get; set; }
     public int? RecurringRuleId { get; set; }
-    /// <summary>Tarjeta cuyo resumen se paga, solo para Operation.PagoTarjeta.</summary>
+    /// <summary>Tarjeta cuyo resumen se paga, solo para tipos OperationKind.PagoTarjeta.</summary>
     public int? PaidCardId { get; set; }
     /// <summary>Compra anterior a la apertura: solo proyecta cuotas, no consume presupuesto.</summary>
     public bool IsPriorCommitment { get; set; }
@@ -127,7 +161,8 @@ public class RecurringRule
     public int Id { get; set; }
     public Scope Scope { get; set; }
     public int PersonId { get; set; }
-    public Operation Operation { get; set; }
+    public int OperationTypeId { get; set; }
+    public OperationType OperationType { get; set; } = null!;
     public required string Description { get; set; }
     public int CategoryId { get; set; }
     public int PaymentMethodId { get; set; }
@@ -163,4 +198,15 @@ public class Settings
     public int AlertControlPct { get; set; } = 80;
     public int AlertExceededPct { get; set; } = 100;
     public int AlertCriticalPct { get; set; } = 120;
+}
+
+/// <summary>Valor de mercado de las inversiones de un ámbito a una fecha, informado por un proveedor (por ahora ninguno).</summary>
+public class InvestmentValuation
+{
+    public int Id { get; set; }
+    public Scope Scope { get; set; }
+    public DateOnly Date { get; set; }
+    public long MarketValue { get; set; }
+    /// <summary>Quién informó el valor, por ejemplo "invertirOnline".</summary>
+    public required string Source { get; set; }
 }

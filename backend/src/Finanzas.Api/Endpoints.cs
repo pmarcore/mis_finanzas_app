@@ -9,8 +9,23 @@ public static class Endpoints
     // La fecha de corte no se guarda: si no viene, es hoy.
     public static DateOnly Today() => DateOnly.FromDateTime(DateTime.Now);
 
-    /// <summary>"familia" o "memey"; "total" o vacío es la suma de ambos (null).</summary>
+    /// <summary>Filtro opcional de listados: "familia" o "memey"; vacío trae los dos ámbitos (null).</summary>
     public static Scope? ParseScope(string? s) => s?.ToLowerInvariant() switch { "familia" => Scope.Familia, "memey" => Scope.Memey, _ => null };
+
+    /// <summary>Saldos y reportes son siempre de un ámbito (no hay vista total): sin indicar, Familia.</summary>
+    public static Scope ScopeOrFamilia(string? s) => ParseScope(s) ?? Scope.Familia;
+
+    /// <summary>Reglas comunes al cargar un movimiento: tipo válido, tarjeta solo donde corresponde.</summary>
+    static string? Validate(Transaction t, OperationType? type, PaymentMethod? method)
+    {
+        if (type is null) return "Elegí un tipo de operación válido.";
+        if (method is null) return "Cada movimiento necesita un medio de pago válido.";
+        if (method.IsCard && type.Kind is OperationKind.PagoTarjeta or OperationKind.Transferencia or OperationKind.Ahorro or OperationKind.Inversion)
+            return $"{type.Name} sale de una caja, no de una tarjeta.";
+        if (type.Kind == OperationKind.PagoTarjeta && (t.PaidCardId is null || t.FirstDueDate is null))
+            return "Un pago de tarjeta necesita la tarjeta y el vencimiento que paga.";
+        return null;
+    }
 
     static Task<Dictionary<int, string>> CardNames(FinanzasDbContext db) =>
         db.PaymentMethods.Where(m => m.Type == PaymentMethodType.Tarjeta).ToDictionaryAsync(m => m.Id, m => m.Name);
@@ -33,7 +48,7 @@ public static class Endpoints
         var cutoff = date ?? Today();
         var end = until ?? Months.EndOf(cutoff);
         if (end < cutoff) return Results.BadRequest("'until' no puede ser anterior a la fecha de corte.");
-        var sc = ParseScope(scope);
+        var sc = ScopeOrFamilia(scope);
         var transactions = await db.Transactions.Include(t => t.Impacts).ToListAsync();
         var cards = await CardNames(db);
         var (calc, _) = await Calculator(db, await db.Categories.ToListAsync(), await db.Budgets.ToListAsync(), transactions, cutoff, end);
@@ -54,7 +69,7 @@ public static class Endpoints
                 kind,
                 transactionId = t?.Id,
                 scope = t?.Scope,
-                operation = t?.Operation,
+                operationTypeId = t?.OperationTypeId,
                 categoryId = t?.CategoryId,
                 status = t?.Status,
                 cardId = l.CardId,
@@ -71,7 +86,7 @@ public static class Endpoints
 
         return Results.Ok(new
         {
-            scope = sc?.ToString().ToLowerInvariant() ?? "total",
+            scope = sc,
             from = ledger.From,
             cutoff,
             until = end,
@@ -85,7 +100,7 @@ public static class Endpoints
     public static void MapDashboard(this WebApplication app) => app.MapGet("/dashboard", async (string? scope, DateOnly? date, FinanzasDbContext db) =>
     {
         var cutoff = date ?? Today();
-        var sc = ParseScope(scope);
+        var sc = ScopeOrFamilia(scope);
         var categories = await db.Categories.ToListAsync();
         var budgets = await db.Budgets.ToListAsync();
         var transactions = await db.Transactions.Include(t => t.Impacts).ToListAsync();
@@ -117,7 +132,7 @@ public static class Endpoints
         return Results.Ok(new
         {
             cutoff,
-            scope = sc?.ToString().ToLowerInvariant() ?? "total",
+            scope = sc,
             cashNow = Money.Pesos(calc.CashAt(sc, cutoff)),
             projectedEndOfMonth = Money.Pesos(projectedEom),
             quarter = quarter.Select(q => new { q.month, balance = Money.Pesos(q.balance) }),
@@ -148,16 +163,16 @@ public static class Endpoints
         {
             var input = body.ToEntity();
             var method = await db.PaymentMethods.Include(m => m.Cycles).FirstOrDefaultAsync(m => m.Id == input.PaymentMethodId);
-            if (method is null) return Results.BadRequest("Cada movimiento necesita un medio de pago válido.");
+            var type = await db.OperationTypes.FindAsync(input.OperationTypeId);
+            if (Validate(input, type, method) is { } error) return Results.BadRequest(error);
+            input.OperationType = type!;
 
-            if (method.IsCard && input.Operation is not Operation.PagoTarjeta)
+            if (method!.IsCard)
             {
                 input.FirstDueDate ??= CardCalendar.ProposeDueDate(method.Cycles, input.Date);
                 if (input.FirstDueDate is null)
                     return Results.BadRequest("Falta cargar el cierre de la tarjeta para esa fecha en Configuración.");
             }
-            if (input.Operation is Operation.PagoTarjeta && (input.PaidCardId is null || input.FirstDueDate is null))
-                return Results.BadRequest("Un pago de tarjeta necesita la tarjeta y el vencimiento que paga.");
 
             var boxes = await db.CashBoxes.ToDictionaryAsync(b => b.Scope, b => b.Id);
             input.Impacts = CashImpactBuilder.Build(input, method, s => boxes[s]);
@@ -176,7 +191,7 @@ public static class Endpoints
             t.Status = TransactionStatus.Realizado;
             t.Date = req?.Date ?? t.Date;
             if (req?.Amount is { } a) t.Amount = Money.Cents(a);
-            if (method.IsCard && t.Operation != Operation.PagoTarjeta && t.RecurringRuleId is not null)
+            if (method.IsCard && t.OperationType.Kind != OperationKind.PagoTarjeta && t.RecurringRuleId is not null)
                 t.FirstDueDate = CardCalendar.ProposeDueDate(method.Cycles, t.Date) ?? t.FirstDueDate;
             db.CashImpacts.RemoveRange(t.Impacts);
             t.Impacts = CashImpactBuilder.Build(t, method, s => boxes[s]);
@@ -223,6 +238,17 @@ public static class Endpoints
         });
     }
 
+    static async Task<string?> RuleError(FinanzasDbContext db, RecurringRuleDto body)
+    {
+        var type = await db.OperationTypes.FindAsync(body.OperationTypeId);
+        if (type is null) return "Elegí un tipo de operación válido.";
+        if (type.Kind == OperationKind.PagoTarjeta) return "Los pagos de tarjeta salen de los resúmenes, no se cargan como fijos.";
+        var method = await db.PaymentMethods.FindAsync(body.PaymentMethodId);
+        if (method is null) return "Elegí un medio de pago válido.";
+        if (method.IsCard && type.Kind != OperationKind.Movimiento) return $"{type.Name} sale de una caja, no de una tarjeta.";
+        return null;
+    }
+
     public static void MapRecurringRules(this WebApplication app)
     {
         var rules = app.MapGroup("/recurring-rules");
@@ -237,6 +263,7 @@ public static class Endpoints
         rules.MapPost("/", async (RecurringRuleDto body, FinanzasDbContext db) =>
         {
             if (body.Amounts.Count == 0) return Results.BadRequest("El gasto fijo necesita al menos un monto.");
+            if (await RuleError(db, body) is { } error) return Results.BadRequest(error);
             var rule = new RecurringRule { Description = body.Description };
             body.ApplyTo(rule);
             db.RecurringRules.Add(rule);
@@ -251,6 +278,7 @@ public static class Endpoints
             var rule = await db.RecurringRules.Include(r => r.Amounts).FirstOrDefaultAsync(r => r.Id == id);
             if (rule is null) return Results.NotFound();
             if (body.Amounts.Count == 0) return Results.BadRequest("El gasto fijo necesita al menos un monto.");
+            if (await RuleError(db, body) is { } error) return Results.BadRequest(error);
             db.RecurringRuleAmounts.RemoveRange(rule.Amounts);
             body.ApplyTo(rule);
             var missing = await RecurringRuleSync.RegenerateAsync(db, rule, Today());
@@ -295,7 +323,7 @@ public static class Endpoints
             var cut = cutoff ?? Today();
             var first = new DateOnly(cut.Year, cut.Month, 1);
             if (month is not null && !Months.TryParse(month, out first)) return Results.BadRequest("Mes con formato yyyy-MM.");
-            var sc = ParseScope(scope) ?? Scope.Familia;
+            var sc = ScopeOrFamilia(scope);
 
             var rows = Budgeting.Report(
                 await db.Categories.ToListAsync(), await db.Budgets.ToListAsync(), await db.Transactions.ToListAsync(),
@@ -346,13 +374,6 @@ public static class Endpoints
         });
 
         app.MapGet("/people", async (FinanzasDbContext db) => await db.People.OrderBy(p => p.Id).ToListAsync());
-        app.MapGet("/categories", async (string? scope, FinanzasDbContext db) =>
-        {
-            var sc = ParseScope(scope);
-            return await db.Categories.Where(c => sc == null || c.Scope == sc).OrderBy(c => c.Name).ToListAsync();
-        });
-        app.MapGet("/payment-methods", async (FinanzasDbContext db) =>
-            (await db.PaymentMethods.OrderBy(m => m.Id).ToListAsync()).Select(PaymentMethodDto.From));
     }
 
     public static void MapImport(this WebApplication app) =>

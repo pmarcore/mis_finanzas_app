@@ -1,25 +1,16 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   useCategories,
   useCreateRecurringRule,
   useDeleteRecurringRule,
+  useOperationTypes,
   usePaymentMethods,
   usePeople,
   useRecurringRules,
   useUpdateRecurringRule,
 } from '../api/endpoints';
-import {
-  OPERATION_LABELS,
-  OPERATIONS,
-  type Id,
-  type Month,
-  type NewRecurringRule,
-  type Operation,
-  type RecurringRule,
-  type RecurringRuleSaveResult,
-  type Scope,
-} from '../api/types';
+import type { Id, Month, NewRecurringRule, RecurringRule, RecurringRuleSaveResult, Scope } from '../api/types';
 import { Card } from '../components/Card';
 import { ChipPicker } from '../components/ChipPicker';
 import { Field, Input } from '../components/Field';
@@ -54,6 +45,7 @@ function RuleForm({
   const people = usePeople();
   const categories = useCategories();
   const methods = usePaymentMethods();
+  const operationTypes = useOperationTypes();
   const create = useCreateRecurringRule();
   const update = useUpdateRecurringRule();
   const save = initial ? update : create;
@@ -61,7 +53,7 @@ function RuleForm({
   const [description, setDescription] = useState(initial?.description ?? '');
   const [scope, setScope] = useState<Scope>(initial?.scope ?? defaultScope);
   const [personId, setPersonId] = useState<Id | undefined>(initial?.personId);
-  const [operation, setOperation] = useState<Operation>(initial?.operation ?? 'gasto');
+  const [operationTypeId, setOperationTypeId] = useState<Id | undefined>(initial?.operationTypeId);
   const [categoryId, setCategoryId] = useState<Id | undefined>(initial?.categoryId);
   const [paymentMethodId, setPaymentMethodId] = useState<Id | undefined>(initial?.paymentMethodId);
   const [dayText, setDayText] = useState(String(initial?.dayOfMonth ?? 1));
@@ -74,25 +66,47 @@ function RuleForm({
   );
   const [submitted, setSubmitted] = useState(false);
 
-  const kind = operation === 'ingreso' ? 'ingreso' : 'gasto';
+  // Pago de tarjeta necesita tarjeta y vencimiento puntual: no se modela como fijo.
+  const operations = useMemo(
+    () =>
+      (operationTypes.data ?? []).filter(
+        (t) => t.kind !== 'pagoTarjeta' && ((t.active && t.scopes.includes(scope)) || t.id === initial?.operationTypeId),
+      ),
+    [operationTypes.data, scope, initial?.operationTypeId],
+  );
+  const type = operations.find((t) => t.id === operationTypeId);
+  useEffect(() => {
+    if (!type && operations.length > 0)
+      setOperationTypeId((operations.find((t) => t.kind === 'movimiento' && t.effect === 'resta') ?? operations[0]).id);
+  }, [type, operations]);
+  const kind = type?.effect === 'suma' ? 'ingreso' : 'gasto';
   const visibleCategories = useMemo(
-    () => (categories.data ?? []).filter((c) => c.scope === scope && c.kind === kind),
-    [categories.data, scope, kind],
+    () =>
+      (categories.data ?? []).filter(
+        (c) => c.scope === scope && c.kind === kind && (c.active || c.id === initial?.categoryId),
+      ),
+    [categories.data, scope, kind, initial?.categoryId],
+  );
+  // Con tarjeta solo ingresos y gastos comunes; ahorro, inversión y transferencias salen de una caja.
+  const visibleMethods = (methods.data ?? []).filter(
+    (m) => (m.active || m.id === initial?.paymentMethodId) && (type?.kind === 'movimiento' || !m.isCard),
   );
   const accent = scopeColor(colors, scope);
-  // Pago de tarjeta necesita tarjeta y vencimiento puntual: no se modela como fijo.
-  const operations = OPERATIONS.filter((o) => o !== 'pagoTarjeta' || initial?.operation === 'pagoTarjeta');
 
   const day = Number.parseInt(dayText, 10);
   const parsedAmounts = amounts.map((a) => ({ fromMonth: a.fromMonth, amount: parseAmount(a.amountText) }));
   const errors = {
     description: !description.trim() ? 'Poné una descripción.' : undefined,
+    type: type === undefined ? 'Elegí un tipo de operación.' : undefined,
     person: personId === undefined ? 'Elegí una persona.' : undefined,
     category:
       categoryId === undefined || !visibleCategories.some((c) => c.id === categoryId)
         ? 'Elegí una categoría.'
         : undefined,
-    paymentMethod: paymentMethodId === undefined ? 'Elegí un medio de pago.' : undefined,
+    paymentMethod:
+      paymentMethodId === undefined || !visibleMethods.some((m) => m.id === paymentMethodId)
+        ? 'Elegí un medio de pago.'
+        : undefined,
     day: !(day >= 1 && day <= 31) ? 'Día entre 1 y 31.' : undefined,
     startMonth: !isValidMonth(startMonth) ? 'Mes inválido (AAAA-MM).' : undefined,
     endMonth:
@@ -107,11 +121,11 @@ function RuleForm({
 
   const onSubmit = () => {
     setSubmitted(true);
-    if (hasErrors || personId === undefined || categoryId === undefined || paymentMethodId === undefined) return;
+    if (hasErrors || !type || personId === undefined || categoryId === undefined || paymentMethodId === undefined) return;
     const body: NewRecurringRule = {
       scope,
       personId,
-      operation,
+      operationTypeId: type.id,
       description: description.trim(),
       categoryId,
       paymentMethodId,
@@ -144,14 +158,15 @@ function RuleForm({
           ]}
         />
       </Field>
-      <Field label="Tipo de movimiento">
+      <Field label="Tipo de movimiento" error={show(errors.type)}>
         <Select
           title="Tipo de movimiento"
+          placeholder="Elegí un tipo"
           items={operations}
-          getKey={(o) => o}
-          getLabel={(o) => OPERATION_LABELS[o]}
-          selectedKey={operation}
-          onSelect={setOperation}
+          getKey={(t) => t.id}
+          getLabel={(t) => t.name}
+          selectedKey={operationTypeId}
+          onSelect={(t) => setOperationTypeId(t.id)}
           accent={accent}
         />
       </Field>
@@ -181,7 +196,7 @@ function RuleForm({
         <Select
           title="Medio de pago"
           placeholder="Elegí un medio de pago"
-          items={methods.data ?? []}
+          items={visibleMethods}
           getKey={(m) => m.id}
           getLabel={(m) => m.name}
           selectedKey={paymentMethodId}
@@ -262,6 +277,7 @@ export function FijosScreen() {
   const q = useRecurringRules(scope);
   const categories = useCategories();
   const methods = usePaymentMethods();
+  const types = useOperationTypes();
   const remove = useDeleteRecurringRule();
   // undefined = sin formulario; null = alta; regla = edición.
   const [editing, setEditing] = useState<RecurringRule | null | undefined>(undefined);
@@ -315,7 +331,7 @@ export function FijosScreen() {
         <RuleForm
           key={editing?.id ?? 'nuevo'}
           initial={editing ?? undefined}
-          defaultScope={scope === 'memey' ? 'memey' : 'familia'}
+          defaultScope={scope}
           onCancel={() => setEditing(undefined)}
           onSaved={(res) => {
             setMissingCycles(res.missingCycles);
@@ -341,7 +357,7 @@ export function FijosScreen() {
                 <Text style={{ color: colors.inkMuted }}>día {r.dayOfMonth}</Text>
               </View>
               <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
-                {OPERATION_LABELS[r.operation]} · {categoryName(r.categoryId)}
+                {types.data?.find((t) => t.id === r.operationTypeId)?.name ?? ''} · {categoryName(r.categoryId)}
                 {methodName(r.paymentMethodId) ? ` · ${methodName(r.paymentMethodId)}` : ''} · desde{' '}
                 {formatMonth(r.startMonth)}
                 {r.endMonth ? ` hasta ${formatMonth(r.endMonth)}` : ''}

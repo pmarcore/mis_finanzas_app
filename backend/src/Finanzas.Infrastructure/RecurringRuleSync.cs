@@ -18,6 +18,8 @@ public static class RecurringRuleSync
     public static async Task<List<DateOnly>> RegenerateAsync(FinanzasDbContext db, RecurringRule rule, DateOnly today)
     {
         var method = await db.PaymentMethods.Include(m => m.Cycles).FirstAsync(m => m.Id == rule.PaymentMethodId);
+        // Si la regla cambió de tipo, la navegación puede seguir apuntando al anterior.
+        rule.OperationType = await db.OperationTypes.FirstAsync(t => t.Id == rule.OperationTypeId);
         var boxes = await db.CashBoxes.ToDictionaryAsync(b => b.Scope, b => b.Id);
         var existing = await db.Transactions.Include(t => t.Impacts).Where(t => t.RecurringRuleId == rule.Id).ToListAsync();
 

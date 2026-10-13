@@ -17,23 +17,18 @@ public static class CardCalendar
 
 public static class CashImpactBuilder
 {
-    public static int SignOf(Operation op) => op switch
-    {
-        Operation.Ingreso => 1,
-        Operation.Gasto or Operation.PagoTarjeta or Operation.CuotaAuto or Operation.Ahorro => -1,
-        _ => throw new ArgumentOutOfRangeException(nameof(op), "Las transferencias generan dos impactos"),
-    };
-
     /// <summary>
     /// Genera los impactos en caja de un movimiento. La caja es la del ámbito del movimiento (como en la planilla:
     /// un gasto familiar pagado desde Memey MP sale de la caja familiar). Con tarjeta devuelve líneas de resumen
-    /// (CardId informado), que la proyección agrupa por tarjeta y vencimiento.
+    /// (CardId informado), que la proyección agrupa por tarjeta y vencimiento. Requiere tx.OperationType cargado.
     /// </summary>
     public static List<CashImpact> Build(Transaction tx, PaymentMethod method, Func<Scope, int> cashBoxOf)
     {
-        if (tx.Operation is Operation.AporteAMemey or Operation.RetiroDeMemey)
+        var type = tx.OperationType ?? throw new InvalidOperationException("Falta el tipo de operación del movimiento.");
+        if (type.Kind == OperationKind.Transferencia)
         {
-            var (from, to) = tx.Operation == Operation.AporteAMemey ? (Scope.Familia, Scope.Memey) : (Scope.Memey, Scope.Familia);
+            var to = type.TransferTo ?? throw new InvalidOperationException($"La transferencia {type.Name} no tiene caja de destino.");
+            var from = to == Scope.Familia ? Scope.Memey : Scope.Familia;
             return
             [
                 new CashImpact { CashBoxId = cashBoxOf(from), ImpactDate = tx.Date, Amount = -tx.Amount },
@@ -41,7 +36,7 @@ public static class CashImpactBuilder
             ];
         }
 
-        var sign = SignOf(tx.Operation);
+        var sign = type.Sign;
         if (!method.IsCard)
             return [new CashImpact { CashBoxId = cashBoxOf(tx.Scope), ImpactDate = tx.Date, Amount = sign * tx.Amount }];
 
@@ -81,7 +76,8 @@ public static class RecurringRuleExpander
             {
                 Scope = rule.Scope,
                 PersonId = rule.PersonId,
-                Operation = rule.Operation,
+                OperationTypeId = rule.OperationTypeId,
+                OperationType = rule.OperationType,
                 Date = date,
                 Description = rule.Description,
                 CategoryId = rule.CategoryId,
@@ -102,6 +98,8 @@ public class CashFlowCalculator(
     IReadOnlyList<Statement> statements,
     IReadOnlyList<BudgetEstimate>? estimates = null)
 {
+    static bool IsCardPayment(Transaction t) => t.OperationType.Kind == OperationKind.PagoTarjeta;
+
     IEnumerable<CashBox> Boxes(Scope? scope) => boxes.Where(b => scope is null || b.Scope == scope);
 
     IEnumerable<(Transaction Tx, CashImpact Impact)> Impacts(Scope? scope)
@@ -128,7 +126,7 @@ public class CashFlowCalculator(
         var direct = impacts
             .Where(x => x.Impact.CardId is null && x.Impact.ImpactDate <= until)
             .Where(x => !(x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate <= cutoff))
-            .Where(x => !(x.Tx.Operation == Operation.PagoTarjeta && x.Tx.Status == TransactionStatus.Previsto))
+            .Where(x => !(IsCardPayment(x.Tx) && x.Tx.Status == TransactionStatus.Previsto))
             .Sum(x => x.Impact.Amount);
 
         var estimated = (estimates ?? []).Where(e => (scope is null || e.Scope == scope) && e.Date > cutoff && e.Date <= until).Sum(e => e.Amount);
@@ -159,7 +157,7 @@ public class CashFlowCalculator(
         var pending = ByTransaction(impacts
                 .Where(x => x.Impact.ImpactDate <= until)
                 .Where(x => !(x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate <= cutoff))
-                .Where(x => !(x.Tx.Operation == Operation.PagoTarjeta && x.Tx.Status == TransactionStatus.Previsto)))
+                .Where(x => !(IsCardPayment(x.Tx) && x.Tx.Status == TransactionStatus.Previsto)))
             .Concat(CardOutstanding(Impacts(scope).ToList(), cutoff, until).Where(s => s.Outstanding > 0)
                 .Select(s => new CashLedgerLine(s.DueDate, null, s.CardId, -s.Outstanding)))
             .Concat((estimates ?? []).Where(e => (scope is null || e.Scope == scope) && e.Date > cutoff && e.Date <= until)
@@ -179,7 +177,7 @@ public class CashFlowCalculator(
             .GroupBy(x => (Card: x.Impact.CardId!.Value, Due: x.Impact.ImpactDate))
             .ToDictionary(g => g.Key, g => -g.Sum(x => x.Impact.Amount));
 
-        var payments = impacts.Where(x => x.Tx.Operation == Operation.PagoTarjeta && x.Tx.PaidCardId is not null && x.Tx.FirstDueDate is not null)
+        var payments = impacts.Where(x => IsCardPayment(x.Tx) && x.Tx.PaidCardId is not null && x.Tx.FirstDueDate is not null)
             .GroupBy(x => (Card: x.Tx.PaidCardId!.Value, Due: x.Tx.FirstDueDate!.Value))
             .ToDictionary(g => g.Key, g => (
                 Planned: -g.Where(x => x.Tx.Status == TransactionStatus.Previsto).Sum(x => x.Impact.Amount),
@@ -194,6 +192,18 @@ public class CashFlowCalculator(
             yield return (k.Card, k.Due, expected, Math.Max(0, expected - pay.Paid));
         }
     }
+}
+
+/// <summary>Saldos de ahorro e inversión: lo que salió de la caja hacia ellos menos lo que volvió. Se ven aparte de la caja.</summary>
+public static class Savings
+{
+    /// <summary>Saldo aportado a un destino (Ahorro o Inversión) de un ámbito con los movimientos realizados hasta el corte.</summary>
+    public static long BalanceAt(IEnumerable<Transaction> transactions, Scope scope, OperationKind kind, DateOnly cutoff) =>
+        Movements(transactions, scope, kind).Where(t => t.Status == TransactionStatus.Realizado && t.Date <= cutoff)
+            .Sum(t => -t.OperationType.Sign * t.Amount);
+
+    public static IEnumerable<Transaction> Movements(IEnumerable<Transaction> transactions, Scope scope, OperationKind kind) =>
+        transactions.Where(t => t.Scope == scope && t.OperationType.Kind == kind);
 }
 
 /// <summary>Línea de caja: un movimiento (Transaction), un resumen de tarjeta pendiente (CardId) o el gasto estimado del presupuesto (ambos null).</summary>

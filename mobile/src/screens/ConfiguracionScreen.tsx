@@ -1,3 +1,5 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -302,9 +304,40 @@ function CiclosSection() {
   );
 }
 
+const CATALOGOS = [
+  { screen: 'TiposOperacion', label: 'Tipos de operación', hint: 'Por ámbito, si suman o restan de caja' },
+  { screen: 'Categorias', label: 'Categorías', hint: 'De gasto e ingreso, por ámbito' },
+  { screen: 'MediosPago', label: 'Medios de pago', hint: 'Débito, efectivo, billeteras y tarjetas' },
+] as const;
+
+/** Accesos a la configuración de catálogos (cada uno en su pantalla). */
+function CatalogosSection() {
+  const { colors } = useTheme();
+  const navigation = useNavigation();
+  return (
+    <Card title="Listas">
+      {CATALOGOS.map((c) => (
+        <Pressable
+          key={c.screen}
+          onPress={() => navigation.navigate(c.screen)}
+          style={[styles.link, { borderBottomColor: colors.border }]}
+          accessibilityRole="button"
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.ink, fontSize: 16, fontWeight: '600' }}>{c.label}</Text>
+            <Text style={{ color: colors.inkMuted, fontSize: 12 }}>{c.hint}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.inkMuted} />
+        </Pressable>
+      ))}
+    </Card>
+  );
+}
+
 export function ConfiguracionScreen() {
   return (
     <Screen>
+      <CatalogosSection />
       <UmbralesSection />
       <CajasSection />
       <CiclosSection />
@@ -319,4 +352,11 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   pct: { width: '47%', gap: spacing.xs },
   button: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
+  link: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
 });
