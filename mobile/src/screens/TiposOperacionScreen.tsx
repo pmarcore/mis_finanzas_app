@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Alert } from '../utils/alert';
 import { useOperationTypeMutations, useOperationTypes } from '../api/endpoints';
 import {
   CASH_EFFECT_LABELS,
