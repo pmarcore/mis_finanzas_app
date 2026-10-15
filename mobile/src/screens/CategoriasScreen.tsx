@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Pressable, Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
+import { Alert } from '../utils/alert';
 import { useCategories, useCategoryMutations } from '../api/endpoints';
 import {
   BUDGET_TYPE_LABELS,

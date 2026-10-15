@@ -49,6 +49,20 @@ Para cargar la foto de octubre (y volver a ese punto cuando quieras empezar de c
 
 Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC. La app busca la API en la misma PC que corre `npx expo start` (puerto 5080), así que no hace falta configurar la IP; si cambia, alcanza con reiniciar Expo y volver a escanear el QR. `EXPO_PUBLIC_API_URL` en `mobile/.env` solo hace falta si la API corre en otra máquina, y después de cambiarlo hay que reiniciar Expo con `npx expo start -c`. Si Windows pregunta por el firewall al levantar Docker o Expo, permití redes privadas.
 
+### Probar en la PC sin celular
+
+La app corre en el navegador de la PC, contra la misma API de Docker:
+
+```bash
+cd mobile
+npm install
+npx expo start --web
+```
+
+Se abre `http://localhost:8081`. Para verla con tamaño de teléfono, en Chrome o Edge apretá F12 y después Ctrl+Shift+M (vista de dispositivo). Al guardar un archivo la página se recarga sola. Los avisos de confirmar (por ejemplo, al borrar con pulsación larga) aparecen como ventanas del navegador.
+
+Si querés un Android de verdad en la PC, instalá Android Studio, creá un dispositivo en Device Manager, arrancalo y en la consola de `npx expo start` apretá `a`. Expo instala Expo Go en el emulador solo; el emulador llega a la API de la PC sin configurar nada.
+
 Si la app dice "No se pudo conectar con la API en ...", abrí `http://<IP de la PC>:5080/health` en el navegador del celular. Si ahí tampoco carga, el problema es la red o el firewall de Windows (la red Wi-Fi tiene que estar como "Privada"); si carga, revisá que la URL del mensaje sea la de `.env`.
 
 ## Estado

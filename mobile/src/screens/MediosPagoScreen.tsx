@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { Alert } from '../utils/alert';
 import { usePaymentMethodMutations, usePaymentMethods, useSettings } from '../api/endpoints';
 import { PAYMENT_METHOD_TYPE_LABELS, type Id, type PaymentMethod, type PaymentMethodType } from '../api/types';
 import { Card } from '../components/Card';
