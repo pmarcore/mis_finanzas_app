@@ -1,23 +1,100 @@
 # Arquitectura
 
 La app mobile solo muestra y carga datos; la API .NET calcula caja, cuotas y proyecciones con las reglas de la planilla.
+Ver también el [DER](base-de-datos.md), los [diagramas de clases](clases-backend.md), la [app mobile](app-mobile.md) y
+las [tecnologías y versiones](tecnologias.md).
+
+## Vista general
 
 ```mermaid
 flowchart LR
   subgraph Mobile["App mobile (React Native + Expo)"]
-    UI["Inicio, Movimientos, Nuevo, Fijos,<br/>Presupuesto, Reporte, Tarjetas, Configuración"]
+    UI["Pantallas: Inicio, Movimientos, Nuevo, Fijos, Presupuesto<br/>Reporte, Tarjetas, Configuración, Ahorro"]
     RQ["React Query (caché)"]
+    CL["api/client.ts (fetch)"]
   end
   subgraph API[".NET 10 API"]
-    EP["Endpoints ASP.NET Core"]
-    DOM["Domain<br/>CardCalendar · CashImpactBuilder<br/>RecurringRuleExpander · CashFlowCalculator<br/>Budgeting"]
+    EP["Endpoints Minimal API<br/>Endpoints.cs · Catalogs.cs · Dtos.cs"]
+    DOM["Domain<br/>CardCalendar · CashImpactBuilder<br/>RecurringRuleExpander · CashFlowCalculator<br/>Budgeting · Savings"]
     INF["Infrastructure<br/>EF Core 10 + migraciones<br/>RecurringRuleSync · SheetImport"]
   end
   DB[("SQLite<br/>finanzas.db")]
   GS["Planilla Google<br/>(foto JSON en data/import)"]
-  UI --> RQ -->|HTTPS JSON| EP --> DOM --> INF -->|SQL| DB
-  GS -.->|import| EP
+  IOL["Invertir Online<br/>(pendiente de conectar)"]
+  UI --> RQ --> CL -->|HTTP JSON| EP
+  EP --> DOM
+  EP --> INF -->|SQL| DB
+  GS -.->|POST /import/sheet| EP
+  EP -.->|IInvestmentProvider| IOL
 ```
+
+## Capas
+
+| Capa | Proyecto o carpeta | Qué hace | Qué no hace |
+| --- | --- | --- | --- |
+| Presentación | `mobile/` | Pantallas, formularios, caché de consultas, formato de pesos y fechas | No calcula saldos ni proyecciones |
+| API | `backend/src/Finanzas.Api` | Rutas HTTP, validación de entrada, DTOs (pesos ↔ centavos), arranque | No guarda reglas de negocio propias |
+| Dominio | `backend/src/Finanzas.Domain` | Entidades y reglas puras: impactos en caja, cuotas, proyecciones, presupuesto | No conoce la base ni HTTP |
+| Infraestructura | `backend/src/Finanzas.Infrastructure` | EF Core + SQLite, migraciones y datos sembrados, gastos fijos, importación, proveedor de inversiones | — |
+| Datos | SQLite (`finanzas.db`) | Un archivo por ambiente | — |
+
+El dominio no depende de nada; la API arma los datos con EF Core y llama a funciones puras del dominio. Eso permite
+probar las reglas sin base de datos.
+
+## Flujo: cargar un movimiento con tarjeta
+
+```mermaid
+sequenceDiagram
+  actor U as Usuario
+  participant App as App mobile
+  participant API as POST /transactions
+  participant Dom as Domain
+  participant DB as SQLite
+  U->>App: Completa el formulario (tarjeta, 3 cuotas)
+  App->>API: NewTransactionDto (pesos)
+  API->>DB: Lee medio de pago con cierres y tipo de operación
+  API->>API: Valida tipo, ámbito y medio
+  API->>Dom: CardCalendar.ProposeDueDate(cierres, fecha)
+  Dom-->>API: Primer vencimiento (o 400 si falta el cierre)
+  API->>Dom: CashImpactBuilder.Build(movimiento, medio, caja del ámbito)
+  Dom-->>API: 3 CashImpact, uno por vencimiento, con CardId
+  API->>DB: INSERT Transactions + CashImpacts
+  API-->>App: 201 TransactionDto
+  App->>App: Invalida dashboard, flujo de caja, reportes y ahorro
+```
+
+El dashboard (`GET /dashboard`) recorre el camino inverso: carga movimientos con sus impactos, cajas, resúmenes,
+presupuestos y gastos fijos, y `CashFlowCalculator` calcula caja al corte, fin de mes, trimestral y pagos de tarjeta.
+
+## Despliegue (ambiente de pruebas)
+
+Corre en la PC de Pablo con Docker Desktop; no hay nada en la nube.
+
+```mermaid
+flowchart LR
+  subgraph PC["PC (Docker Desktop)"]
+    subgraph Compose["docker compose"]
+      A["api<br/>imagen backend/Dockerfile<br/>:8080 → 5080"]
+      ADM["db-admin<br/>sqlite-web<br/>127.0.0.1:8090"]
+      V[("volumen finanzas-pruebas<br/>/data/finanzas.db")]
+      A --- V
+      ADM --- V
+    end
+    EX["Expo dev server<br/>npx expo start (:8081 web)"]
+    BR["Navegador<br/>localhost:8081"]
+  end
+  CEL["Celular con Expo Go<br/>(misma Wi-Fi)"]
+  EX --> BR
+  EX --> CEL
+  BR -->|HTTP :5080| A
+  CEL -->|HTTP IP-de-la-PC:5080| A
+```
+
+- La app toma la URL de la API de `EXPO_PUBLIC_API_URL` o, si no está, del host que sirve Expo, puerto 5080
+  (`mobile/src/api/client.ts`).
+- La API no tiene login y el CORS está abierto: solo debe exponerse en la red local. El admin de la base escucha solo en
+  `127.0.0.1`.
+- `scripts/seed-pruebas.sh` (o `.ps1` en Windows) carga la foto de octubre de la planilla en la base de pruebas.
 
 ## Reglas que implementa `Finanzas.Domain`
 
@@ -40,7 +117,7 @@ flowchart LR
 
 ## Datos
 
-Montos en centavos (`long`), fechas `DateOnly`. Las proyecciones leen solo `CashImpact`. Cierres y vencimientos de tarjeta en `CardCycle`, uno por mes, editables desde Configuración.
+Montos en centavos (`long`), fechas `DateOnly`. Las proyecciones leen solo `CashImpact`. Cierres y vencimientos de tarjeta en `CardCycle`, uno por mes, editables desde Configuración. Detalle de tablas, relaciones y datos sembrados en [base-de-datos.md](base-de-datos.md).
 
 ## Endpoints
 
@@ -48,7 +125,10 @@ Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`fami
 
 | Método y ruta | Para qué |
 | --- | --- |
-| `GET /dashboard?scope&date` | Caja al corte (hoy por defecto), fin de mes, trimestral, caja libre, Memey, pagos de tarjeta por mes, alertas |
+| `GET /health` | Chequeo de vida |
+| `GET /openapi/v1.json` | Especificación OpenAPI generada |
+| `GET /dashboard?scope&date` | Caja al corte (hoy por defecto), fin de mes, trimestral, gasto estimado de meses futuros, Memey, pagos de tarjeta por mes |
+| `GET /cashflow?scope&date&until` | Flujo de caja del mes del corte con saldo acumulado: cierra en la caja actual y en la de fin de mes |
 | `GET/POST /transactions`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` | Movimientos |
 | `GET /cards/{id}/due-date?purchaseDate`, `GET/PUT /cards/{id}/cycles` | Vencimiento propuesto y cierres mes a mes |
 | `GET/POST /recurring-rules`, `PUT/DELETE /recurring-rules/{id}` | Gastos fijos con monto vigente por mes |
