@@ -49,6 +49,22 @@ Para cargar la foto de octubre (y volver a ese punto cuando quieras empezar de c
 
 Para probar en el celular con Expo Go, el teléfono tiene que estar en el mismo Wi-Fi que la PC. La app busca la API en la misma PC que corre `npx expo start` (puerto 5080), así que no hace falta configurar la IP; si cambia, alcanza con reiniciar Expo y volver a escanear el QR. `EXPO_PUBLIC_API_URL` en `mobile/.env` solo hace falta si la API corre en otra máquina, y después de cambiarlo hay que reiniciar Expo con `npx expo start -c`. Si Windows pregunta por el firewall al levantar Docker o Expo, permití redes privadas.
 
+### Admin de la base de datos
+
+`docker compose up -d` también levanta un administrador web de la base en http://localhost:8090. Ahí ves todas las tablas, podés editar, agregar o borrar filas y correr SQL (pestaña Query). Abre el mismo archivo que usa la API (`/data/finanzas.db` en el volumen `finanzas-pruebas`), así que lo que cambies se ve en la app al refrescar. Solo responde desde tu PC (no desde el celular ni otra máquina de la red) y no pide contraseña.
+
+Los cambios son directos y no se pueden deshacer. Si rompés algo, el script de carga vuelve a la foto de octubre.
+
+Alternativa con [DB Browser for SQLite](https://sqlitebrowser.org): pará los servicios para que la base quede completa en un solo archivo y copiala a tu carpeta.
+
+```bash
+docker compose stop
+docker compose cp api:/data/finanzas.db .
+docker compose start
+```
+
+Esa es una copia: lo que edites ahí no llega a la app. Para devolverla con tus cambios, repetí lo mismo con `docker compose cp finanzas.db api:/data/finanzas.db` en el medio.
+
 ### Probar en la PC sin celular
 
 La app corre en el navegador de la PC, contra la misma API de Docker:
