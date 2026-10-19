@@ -81,7 +81,7 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 | Movimientos | Lista de movimientos (filtrable por medio de pago y por categoría del ámbito, con "Todos") y flujo de caja con saldo acumulado; confirmar previstos; tocar un movimiento abre Editar movimiento (mantener apretado lo borra) | `GET /transactions?categoryId&paymentMethodId`, `GET /cashflow`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` |
 | Editar movimiento | El mismo formulario que el alta, precargado; guardar o borrar con confirmación | `GET/PUT/DELETE /transactions/{id}`, `GET /cards/{id}/due-date` |
 | Nuevo movimiento | Alta con tipo, categoría, medio, cuotas y vencimiento propuesto | `POST /transactions`, `GET /cards/{id}/due-date` |
-| Fijos | Gastos fijos con monto vigente por mes | `GET/POST/PUT/DELETE /recurring-rules` |
+| Fijos | Gastos fijos con vigencia desde-hasta, cambios de monto e incrementos % por mes, y proyección mes a mes en el formulario | `GET/POST/PUT/DELETE /recurring-rules` |
 | Presupuesto | Presupuesto mensual por categoría, uno para Familia y otro para Memey (selector arriba); muestra el total | `GET/PUT /budgets/{month}?scope` |
 | Presupuesto vs. real | Reporte de una entidad (Familia o Memey) con fecha de corte y alertas; tocar una categoría abre sus movimientos | `GET /reports/budget-vs-actual` |
 | Movimientos de una categoría | Los movimientos que suman el real de la categoría en el mes al corte, con el total; tocar uno abre Editar movimiento | `GET /reports/budget-vs-actual/{categoryId}/transactions` |

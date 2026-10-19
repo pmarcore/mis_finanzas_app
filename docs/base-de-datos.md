@@ -117,7 +117,8 @@ erDiagram
         INTEGER Id PK
         INTEGER RecurringRuleId FK
         TEXT FromMonth
-        INTEGER Amount "centavos"
+        INTEGER Amount "centavos (0 si es incremento)"
+        TEXT IncreasePercent "nullable"
     }
     Budgets {
         INTEGER Id PK
@@ -217,6 +218,9 @@ Configurables desde la app. `Kind` define el comportamiento, `Effect` si suma o 
 
 Regla mensual (día del mes, desde/hasta) con medio de pago. El monto tiene historia: cada fila de
 `RecurringRuleAmounts` vale desde `FromMonth` hasta el próximo cambio, así cambiar el monto no toca meses anteriores.
+Una fila con `IncreasePercent` es un incremento previsto: aplica ese % sobre el monto vigente hasta ese mes
+(varios incrementos se acumulan; una fila con monto fijo los reemplaza). La primera fila siempre es un monto.
+La vigencia es `StartMonth`–`EndMonth`; sin `EndMonth` se proyecta hasta el horizonte.
 La regla genera movimientos `Previsto` en `Transactions` hasta fin de año (mínimo tres meses adelante).
 
 ### Categories y Budgets (presupuesto)
@@ -273,6 +277,7 @@ En `backend/src/Finanzas.Infrastructure/Migrations/`:
 | `20261008191001_InitialCreate` | Esquema inicial y datos sembrados. |
 | `20261008194003_CategoryUniqueName` | Nombre de categoría único por ámbito. |
 | `20261012014247_TiposDeOperacionAhorroInversion` | Tabla `OperationTypes`: la columna `Operation` (enum) de movimientos y gastos fijos pasa a ser `OperationTypeId` con FK. Agrega `Active` en categorías y medios de pago, y la tabla `InvestmentValuations`. |
+| `20261019213123_IncrementoPorcentualEnFijos` | Columna `IncreasePercent` (nullable) en `RecurringRuleAmounts` para los incrementos % previstos de los gastos fijos. Las filas existentes quedan como montos fijos. |
 
 Para crear una nueva (desde `backend/`):
 

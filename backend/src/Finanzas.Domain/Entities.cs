@@ -172,13 +172,17 @@ public class RecurringRule
     public List<RecurringRuleAmount> Amounts { get; set; } = [];
 }
 
-/// <summary>Monto vigente desde un mes; cambiarlo no toca los meses anteriores.</summary>
+/// <summary>
+/// Cambio de monto desde un mes; cambiarlo no toca los meses anteriores.
+/// Es un monto fijo, o un incremento porcentual (IncreasePercent) sobre el monto vigente hasta ese mes.
+/// </summary>
 public class RecurringRuleAmount
 {
     public int Id { get; set; }
     public int RecurringRuleId { get; set; }
     public DateOnly FromMonth { get; set; }
     public long Amount { get; set; }
+    public decimal? IncreasePercent { get; set; }
 }
 
 public class Budget

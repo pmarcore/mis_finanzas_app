@@ -116,7 +116,7 @@ flowchart LR
 | Cada movimiento tiene un tipo de operación configurable (Configuración → Tipos de operación): en qué ámbitos se ofrece, si suma o resta de caja y su comportamiento (ingreso/gasto, pago de tarjeta, transferencia, ahorro, inversión) | `OperationType`, `CashImpactBuilder.Build` |
 | Las transferencias (Aporte a Memey, Retiro de Memey) mueven plata entre cajas sin cambiar el total | `CashImpactBuilder.Build` |
 | Ahorro e inversión salen de la caja (o vuelven con Suma) y se ven aparte; no consumen presupuesto | `Savings.BalanceAt` (`GET /savings`) |
-| Gastos fijos con medio de pago, monto vigente por mes, previstos hasta diciembre | `RecurringRuleExpander` |
+| Gastos fijos con medio de pago, vigencia desde-hasta, monto vigente por mes e incrementos % acumulados, previstos hasta diciembre | `RecurringRuleExpander` |
 | Caja al corte = saldo inicial + realizados hasta la fecha de corte (hoy por defecto) | `CashFlowCalculator.CashAt` |
 | Por tarjeta y vencimiento: el mayor entre modelado, resumen real y pago previsto, menos lo pagado | `CashFlowCalculator.ProjectedAt` |
 | El impacto en caja va a la caja del ámbito del movimiento (un gasto familiar pagado con Memey MP sale de la caja familiar) | `CashImpactBuilder.Build` |
@@ -142,7 +142,7 @@ Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`fami
 | `GET /cashflow?scope&date&until` | Flujo de caja del mes del corte con saldo acumulado: cierra en la caja actual y en la de fin de mes |
 | `GET /transactions?scope&from&to&status&categoryId&paymentMethodId`, `POST /transactions`, `GET/PUT/DELETE /transactions/{id}`, `POST /transactions/{id}/confirm` | Movimientos. Editar o borrar rehace sus impactos en caja: saldos, resúmenes de tarjeta, proyecciones y presupuesto vs. real se recalculan al leer |
 | `GET /cards/{id}/due-date?purchaseDate`, `GET/PUT /cards/{id}/cycles` | Vencimiento propuesto y cierres mes a mes |
-| `GET/POST /recurring-rules`, `PUT/DELETE /recurring-rules/{id}` | Gastos fijos con monto vigente por mes |
+| `GET/POST /recurring-rules`, `PUT/DELETE /recurring-rules/{id}` | Gastos fijos con vigencia, monto vigente por mes e incrementos % (`amounts[].increasePercent`) |
 | `GET/PUT /budgets/{month}?scope` | Presupuesto mensual por categoría de una entidad (Familia por defecto). Cada categoría es de un ámbito, así que el presupuesto se separa por la categoría; el PUT reemplaza solo el de esa entidad y rechaza categorías de la otra |
 | `GET /reports/budget-vs-actual?month&cutoff&scope` | Presupuestado vs real de una entidad con fecha de corte. Si una entidad no cargó el mes, usa su último mes cargado (sin mirar el de la otra) |
 | `GET /reports/budget-vs-actual/{categoryId}/transactions?month&cutoff` | Movimientos que forman el real de esa fila (gastos realizados del mes hasta el corte; con tarjeta, el día de la compra) |

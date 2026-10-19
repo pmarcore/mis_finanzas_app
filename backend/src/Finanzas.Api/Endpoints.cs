@@ -281,12 +281,33 @@ public static class Endpoints
 
     static async Task<string?> RuleError(FinanzasDbContext db, RecurringRuleDto body)
     {
+        if (AmountsError(body) is { } amountsError) return amountsError;
         var type = await db.OperationTypes.FindAsync(body.OperationTypeId);
         if (type is null) return "Elegí un tipo de operación válido.";
         if (type.Kind == OperationKind.PagoTarjeta) return "Los pagos de tarjeta salen de los resúmenes, no se cargan como fijos.";
         var method = await db.PaymentMethods.FindAsync(body.PaymentMethodId);
         if (method is null) return "Elegí un medio de pago válido.";
         if (method.IsCard && type.Kind != OperationKind.Movimiento) return $"{type.Name} sale de una caja, no de una tarjeta.";
+        return null;
+    }
+
+    /// <summary>Vigencia y cambios de monto: el primero tiene que ser un monto, los incrementos % se aplican sobre él.</summary>
+    static string? AmountsError(RecurringRuleDto body)
+    {
+        if (!Months.TryParse(body.StartMonth, out var start)) return "El mes desde es inválido (AAAA-MM).";
+        if (body.EndMonth is not null && (!Months.TryParse(body.EndMonth, out var end) || end < start))
+            return "El mes hasta tiene que ser igual o posterior al mes desde.";
+        if (body.Amounts.Count == 0) return "El gasto fijo necesita al menos un monto.";
+        var months = new HashSet<DateOnly>();
+        foreach (var a in body.Amounts)
+        {
+            if (!Months.TryParse(a.FromMonth, out var m)) return "Cada cambio de monto necesita un mes válido (AAAA-MM).";
+            if (!months.Add(m)) return "Hay dos cambios de monto en el mismo mes.";
+            if (a.IncreasePercent is { } pct ? pct <= -100 : a.Amount <= 0)
+                return a.IncreasePercent is null ? "Cada monto tiene que ser mayor a cero." : "El incremento tiene que ser mayor a -100%.";
+        }
+        if (body.Amounts.MinBy(a => Months.Parse(a.FromMonth))!.IncreasePercent is not null)
+            return "El primer cambio tiene que ser un monto; los incrementos % se aplican sobre él.";
         return null;
     }
 
@@ -303,7 +324,6 @@ public static class Endpoints
 
         rules.MapPost("/", async (RecurringRuleDto body, FinanzasDbContext db) =>
         {
-            if (body.Amounts.Count == 0) return Results.BadRequest("El gasto fijo necesita al menos un monto.");
             if (await RuleError(db, body) is { } error) return Results.BadRequest(error);
             var rule = new RecurringRule { Description = body.Description };
             body.ApplyTo(rule);
@@ -318,7 +338,6 @@ public static class Endpoints
         {
             var rule = await db.RecurringRules.Include(r => r.Amounts).FirstOrDefaultAsync(r => r.Id == id);
             if (rule is null) return Results.NotFound();
-            if (body.Amounts.Count == 0) return Results.BadRequest("El gasto fijo necesita al menos un monto.");
             if (await RuleError(db, body) is { } error) return Results.BadRequest(error);
             db.RecurringRuleAmounts.RemoveRange(rule.Amounts);
             body.ApplyTo(rule);

@@ -23,11 +23,68 @@ import { Segmented } from '../components/Segmented';
 import { Select } from '../components/Select';
 import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
-import { amountToInput, formatMonth, isValidMonth, monthOf, parseAmount, todayISO } from '../utils/format';
+import {
+  addMonths,
+  amountToInput,
+  formatMonth,
+  isValidMonth,
+  monthOf,
+  parseAmount,
+  parsePercent,
+  todayISO,
+} from '../utils/format';
 
 interface AmountDraft {
   fromMonth: Month;
-  amountText: string;
+  /** Monto en pesos, o porcentaje si isIncrease. */
+  valueText: string;
+  isIncrease: boolean;
+}
+
+interface AmountChange {
+  fromMonth: Month;
+  amount: number;
+  increasePercent: number | null;
+}
+
+/** Igual que el backend: hasta fin de año y como mínimo tres meses adelante. */
+function horizon(): Month {
+  const today = monthOf(todayISO());
+  const endOfYear = `${today.slice(0, 4)}-12`;
+  const threeAhead = addMonths(today, 3);
+  return endOfYear > threeAhead ? endOfYear : threeAhead;
+}
+
+/** Monto de cada mes de la vigencia: un monto reemplaza al anterior y los incrementos % se acumulan. */
+function projectAmounts(startMonth: Month, endMonth: Month | null, changes: AmountChange[]) {
+  const sorted = [...changes].sort((a, b) => a.fromMonth.localeCompare(b.fromMonth));
+  const until = endMonth && endMonth < horizon() ? endMonth : horizon();
+  const months: { month: Month; amount: number }[] = [];
+  for (let m = startMonth; m <= until && months.length < 36; m = addMonths(m, 1)) {
+    let amount = 0;
+    for (const c of sorted)
+      if (c.fromMonth <= m)
+        amount = c.increasePercent !== null ? Math.round(amount * (1 + c.increasePercent / 100) * 100) / 100 : c.amount;
+    months.push({ month: m, amount });
+  }
+  return months;
+}
+
+/** Agrupa meses consecutivos con el mismo monto: "nov 2026 – dic 2026 · $ 110.000". */
+function segments(months: { month: Month; amount: number }[]) {
+  const out: { from: Month; to: Month; amount: number }[] = [];
+  for (const { month, amount } of months) {
+    const last = out[out.length - 1];
+    if (last && last.amount === amount) last.to = month;
+    else out.push({ from: month, to: month, amount });
+  }
+  return out;
+}
+
+/** Mes propuesto para un cambio nuevo: el siguiente al último cargado. */
+function nextChangeMonth(as: AmountDraft[]): Month {
+  const last = as.map((a) => a.fromMonth).filter(isValidMonth).sort().pop();
+  return last ? addMonths(last, 1) : monthOf(todayISO());
 }
 
 /** Alta/edición de un gasto fijo (regla recurrente). */
@@ -61,9 +118,11 @@ function RuleForm({
   const [startMonth, setStartMonth] = useState<Month>(initial?.startMonth ?? monthOf(todayISO()));
   const [endMonth, setEndMonth] = useState<string>(initial?.endMonth ?? '');
   const [amounts, setAmounts] = useState<AmountDraft[]>(
-    initial?.amounts.map((a) => ({ fromMonth: a.fromMonth, amountText: amountToInput(a.amount) })) ?? [
-      { fromMonth: monthOf(todayISO()), amountText: '' },
-    ],
+    initial?.amounts.map((a) =>
+      a.increasePercent != null
+        ? { fromMonth: a.fromMonth, valueText: amountToInput(a.increasePercent), isIncrease: true }
+        : { fromMonth: a.fromMonth, valueText: amountToInput(a.amount), isIncrease: false },
+    ) ?? [{ fromMonth: monthOf(todayISO()), valueText: '', isIncrease: false }],
   );
   const [submitted, setSubmitted] = useState(false);
 
@@ -95,7 +154,17 @@ function RuleForm({
   const accent = scopeColor(colors, scope);
 
   const day = Number.parseInt(dayText, 10);
-  const parsedAmounts = amounts.map((a) => ({ fromMonth: a.fromMonth, amount: parseAmount(a.amountText) }));
+  const parsedAmounts = amounts.map((a) => ({
+    fromMonth: a.fromMonth,
+    isIncrease: a.isIncrease,
+    value: a.isIncrease ? parsePercent(a.valueText) : parseAmount(a.valueText),
+  }));
+  const firstChange = [...parsedAmounts].sort((a, b) => a.fromMonth.localeCompare(b.fromMonth))[0];
+  const changes: AmountChange[] = parsedAmounts.map((a) => ({
+    fromMonth: a.fromMonth,
+    amount: a.isIncrease ? 0 : a.value ?? 0,
+    increasePercent: a.isIncrease ? a.value ?? 0 : null,
+  }));
   const errors = {
     description: !description.trim() ? 'Poné una descripción.' : undefined,
     type: type === undefined ? 'Elegí un tipo de operación.' : undefined,
@@ -113,9 +182,16 @@ function RuleForm({
     endMonth:
       endMonth && (!isValidMonth(endMonth) || endMonth < startMonth) ? 'Mes inválido (AAAA-MM, desde el inicio).' : undefined,
     amounts:
-      parsedAmounts.length === 0 || parsedAmounts.some((a) => !isValidMonth(a.fromMonth) || !(a.amount !== null && a.amount > 0))
-        ? 'Cada monto necesita mes (AAAA-MM) y un importe mayor a cero.'
-        : undefined,
+      parsedAmounts.length === 0 ||
+      parsedAmounts.some(
+        (a) => !isValidMonth(a.fromMonth) || a.value === null || (a.isIncrease ? a.value <= -100 : a.value <= 0),
+      )
+        ? 'Cada cambio necesita mes (AAAA-MM) y un monto mayor a cero o un incremento mayor a -100 %.'
+        : new Set(parsedAmounts.map((a) => a.fromMonth)).size !== parsedAmounts.length
+          ? 'Hay dos cambios en el mismo mes.'
+          : firstChange?.isIncrease
+            ? 'El primer cambio tiene que ser un monto; los incrementos se aplican sobre él.'
+            : undefined,
   };
   const hasErrors = Object.values(errors).some(Boolean);
   const show = (e?: string) => (submitted ? e : undefined);
@@ -133,13 +209,15 @@ function RuleForm({
       dayOfMonth: day,
       startMonth,
       endMonth: endMonth || null,
-      amounts: parsedAmounts
-        .map((a) => ({ fromMonth: a.fromMonth, amount: a.amount ?? 0 }))
-        .sort((a, b) => a.fromMonth.localeCompare(b.fromMonth)),
+      amounts: [...changes].sort((a, b) => a.fromMonth.localeCompare(b.fromMonth)),
     };
     if (initial) update.mutate({ ...body, id: initial.id }, { onSuccess: onSaved });
     else create.mutate(body, { onSuccess: onSaved });
   };
+
+  const projected =
+    errors.startMonth || errors.endMonth || errors.amounts ? [] : projectAmounts(startMonth, endMonth || null, changes);
+  const preview = segments(projected);
 
   const patchAmount = (i: number, p: Partial<AmountDraft>) =>
     setAmounts((as) => as.map((a, k) => (k === i ? { ...a, ...p } : a)));
@@ -222,7 +300,7 @@ function RuleForm({
           </Field>
         </View>
       </View>
-      <Field label="Montos (desde mes)" error={show(errors.amounts)}>
+      <Field label="Monto e incrementos (desde mes)" error={show(errors.amounts)}>
         {amounts.map((a, i) => (
           <View key={i} style={styles.row}>
             <Input
@@ -232,12 +310,22 @@ function RuleForm({
               maxLength={7}
               style={{ width: 100 }}
             />
+            <Pressable
+              onPress={() => patchAmount(i, { isIncrease: !a.isIncrease, valueText: '' })}
+              hitSlop={6}
+              accessibilityLabel={a.isIncrease ? 'Cambiar a monto' : 'Cambiar a incremento %'}
+              style={[styles.kind, { borderColor: accent, backgroundColor: a.isIncrease ? accent : 'transparent' }]}
+            >
+              <Text style={{ color: a.isIncrease ? colors.surface : accent, fontWeight: '700' }}>
+                {a.isIncrease ? '+%' : '$'}
+              </Text>
+            </Pressable>
             <Input
-              value={a.amountText}
-              onChangeText={(t) => patchAmount(i, { amountText: t })}
-              placeholder="$ 0"
-              keyboardType="decimal-pad"
-              style={{ flex: 1 }}
+              value={a.valueText}
+              onChangeText={(t) => patchAmount(i, { valueText: t })}
+              placeholder={a.isIncrease ? 'Ej.: 10' : '$ 0'}
+              keyboardType={a.isIncrease ? 'numbers-and-punctuation' : 'decimal-pad'}
+              style={{ flex: 1, minWidth: 0 }}
             />
             {amounts.length > 1 && (
               <Pressable onPress={() => setAmounts((as) => as.filter((_, k) => k !== i))} hitSlop={8}>
@@ -246,15 +334,36 @@ function RuleForm({
             )}
           </View>
         ))}
-        <Pressable
-          onPress={() =>
-            setAmounts((as) => [...as, { fromMonth: monthOf(todayISO()), amountText: '' }])
-          }
-          hitSlop={8}
-        >
-          <Text style={{ color: accent, fontWeight: '600' }}>+ Agregar cambio de monto</Text>
-        </Pressable>
+        <View style={[styles.row, { justifyContent: 'space-between' }]}>
+          <Pressable
+            onPress={() => setAmounts((as) => [...as, { fromMonth: nextChangeMonth(as), valueText: '', isIncrease: false }])}
+            hitSlop={8}
+          >
+            <Text style={{ color: accent, fontWeight: '600' }}>+ Cambio de monto</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setAmounts((as) => [...as, { fromMonth: nextChangeMonth(as), valueText: '', isIncrease: true }])}
+            hitSlop={8}
+          >
+            <Text style={{ color: accent, fontWeight: '600' }}>+ Incremento %</Text>
+          </Pressable>
+        </View>
+        <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
+          Los incrementos se acumulan sobre el monto vigente. Sin mes hasta, se proyecta hasta {formatMonth(horizon())}.
+        </Text>
       </Field>
+      {preview.length > 0 && (
+        <Field label={`Proyección hasta ${formatMonth(preview[preview.length - 1].to)}`}>
+          {preview.map((p) => (
+            <View key={p.from} style={styles.line}>
+              <Text style={{ color: colors.ink }}>
+                {p.from === p.to ? formatMonth(p.from) : `${formatMonth(p.from)} – ${formatMonth(p.to)}`}
+              </Text>
+              <MoneyText value={p.amount} size="sm" />
+            </View>
+          ))}
+        </Field>
+      )}
       {save.error && <Text style={{ color: colors.bad }}>No se pudo guardar: {save.error.message}</Text>}
       <View style={styles.row}>
         <Pressable onPress={onCancel} style={[styles.button, { borderColor: colors.border, borderWidth: 1 }]}>
@@ -365,7 +474,10 @@ export function FijosScreen() {
               </Text>
               {r.amounts.map((a) => (
                 <View key={a.fromMonth} style={styles.line}>
-                  <Text style={{ color: colors.ink }}>desde {formatMonth(a.fromMonth)}</Text>
+                  <Text style={{ color: colors.ink }}>
+                    desde {formatMonth(a.fromMonth)}
+                    {a.increasePercent != null ? ` · ${a.increasePercent > 0 ? '+' : ''}${amountToInput(a.increasePercent)} %` : ''}
+                  </Text>
                   <MoneyText value={a.amount} size="sm" />
                 </View>
               ))}
@@ -387,5 +499,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   title: { fontSize: 16, fontWeight: '600' },
   button: { flex: 1, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
+  kind: { borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, minWidth: 36, alignItems: 'center' },
   newButton: { borderWidth: 1, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
 });

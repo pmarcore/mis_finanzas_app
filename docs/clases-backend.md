@@ -175,6 +175,7 @@ classDiagram
         +int RecurringRuleId
         +DateOnly FromMonth
         +long Amount
+        +decimal IncreasePercent [nullable]
     }
     class Budget {
         +int Id

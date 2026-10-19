@@ -520,6 +520,9 @@ namespace Finanzas.Infrastructure.Migrations
                     b.Property<DateOnly>("FromMonth")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal?>("IncreasePercent")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("RecurringRuleId")
                         .HasColumnType("INTEGER");
 
