@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Alert } from '../utils/alert';
 import {
@@ -22,7 +23,7 @@ import { endOfMonth, formatARS, formatDate, monthOf } from '../utils/format';
 
 type Vista = 'lista' | 'caja';
 
-export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
+export function MovimientosScreen({ route, navigation }: TabScreenProps<'Movimientos'>) {
   const { scope, cutoff } = useScope();
   const { colors } = useTheme();
   const params = route.params;
@@ -67,6 +68,7 @@ export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
     const label = type?.name ?? '';
     return (
       <Pressable
+        onPress={() => navigation.navigate('EditarMovimiento', { id: item.id })}
         onLongPress={() => askDelete(item)}
         style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}
       >
@@ -129,6 +131,9 @@ export function MovimientosScreen({ route }: TabScreenProps<'Movimientos'>) {
           isEmpty={q.data?.length === 0}
           emptyText="No hay movimientos este mes."
         >
+          <Text style={{ color: colors.inkMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
+            Tocá un movimiento para editarlo o borrarlo.
+          </Text>
           <FlatList
             data={q.data ?? []}
             keyExtractor={(t) => String(t.id)}
@@ -166,6 +171,7 @@ function FlujoDeCaja({
 }) {
   const { scope, cutoff } = useScope();
   const { colors } = useTheme();
+  const navigation = useNavigation();
   const accent = scopeColor(colors, scope);
   const q = useCashFlow(scope, cutoff);
   const f = q.data;
@@ -230,8 +236,11 @@ function FlujoDeCaja({
       l.kind === 'movimiento'
         ? l.description || (typeOf(l.operationTypeId)?.name ?? '')
         : l.description;
+    const transactionId = l.transactionId;
     return (
-      <View
+      <Pressable
+        disabled={transactionId == null}
+        onPress={() => transactionId != null && navigation.navigate('EditarMovimiento', { id: transactionId })}
         style={[
           styles.row,
           { backgroundColor: colors.surface, borderColor: colors.border, opacity: l.pending ? 0.75 : 1 },
@@ -250,7 +259,7 @@ function FlujoDeCaja({
           <MoneyText value={l.amount} size="sm" />
           <Text style={{ color: colors.inkMuted, fontSize: 12 }}>Saldo {formatARS(l.balance)}</Text>
         </View>
-      </View>
+      </Pressable>
     );
   };
 

@@ -25,6 +25,7 @@ export type RootStackParamList = {
   Categorias: undefined;
   MediosPago: undefined;
   Ahorro: undefined;
+  EditarMovimiento: { id: number };
 };
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

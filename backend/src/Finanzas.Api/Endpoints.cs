@@ -27,6 +27,32 @@ public static class Endpoints
         return null;
     }
 
+    /// <summary>Valida el movimiento, completa el vencimiento propuesto si es con tarjeta y arma sus impactos en caja.</summary>
+    static async Task<string?> BuildImpacts(FinanzasDbContext db, Transaction t)
+    {
+        var method = await db.PaymentMethods.Include(m => m.Cycles).FirstOrDefaultAsync(m => m.Id == t.PaymentMethodId);
+        var type = await db.OperationTypes.FindAsync(t.OperationTypeId);
+        if (Validate(t, type, method) is { } error) return error;
+        t.OperationType = type!;
+        if (type!.Kind != OperationKind.PagoTarjeta) t.PaidCardId = null;
+
+        if (method!.IsCard)
+        {
+            t.FirstDueDate ??= CardCalendar.ProposeDueDate(method.Cycles, t.Date);
+            if (t.FirstDueDate is null) return "Falta cargar el cierre de la tarjeta para esa fecha en Configuración.";
+        }
+        else
+        {
+            // Sin tarjeta no hay cuotas y sale de la caja en la fecha; solo un pago de tarjeta guarda el vencimiento que paga.
+            t.Installments = 1;
+            if (type.Kind != OperationKind.PagoTarjeta) t.FirstDueDate = null;
+        }
+
+        var boxes = await db.CashBoxes.ToDictionaryAsync(b => b.Scope, b => b.Id);
+        t.Impacts = CashImpactBuilder.Build(t, method, s => boxes[s]);
+        return null;
+    }
+
     static Task<Dictionary<int, string>> CardNames(FinanzasDbContext db) =>
         db.PaymentMethods.Where(m => m.Type == PaymentMethodType.Tarjeta).ToDictionaryAsync(m => m.Id, m => m.Name);
 
@@ -159,26 +185,39 @@ public static class Endpoints
             return list.Select(TransactionDto.From);
         });
 
+        tx.MapGet("/{id:int}", async (int id, FinanzasDbContext db) =>
+            await db.Transactions.FindAsync(id) is { } t ? Results.Ok(TransactionDto.From(t)) : Results.NotFound());
+
         tx.MapPost("/", async (NewTransactionDto body, FinanzasDbContext db) =>
         {
             var input = body.ToEntity();
-            var method = await db.PaymentMethods.Include(m => m.Cycles).FirstOrDefaultAsync(m => m.Id == input.PaymentMethodId);
-            var type = await db.OperationTypes.FindAsync(input.OperationTypeId);
-            if (Validate(input, type, method) is { } error) return Results.BadRequest(error);
-            input.OperationType = type!;
-
-            if (method!.IsCard)
-            {
-                input.FirstDueDate ??= CardCalendar.ProposeDueDate(method.Cycles, input.Date);
-                if (input.FirstDueDate is null)
-                    return Results.BadRequest("Falta cargar el cierre de la tarjeta para esa fecha en Configuración.");
-            }
-
-            var boxes = await db.CashBoxes.ToDictionaryAsync(b => b.Scope, b => b.Id);
-            input.Impacts = CashImpactBuilder.Build(input, method, s => boxes[s]);
+            if (await BuildImpacts(db, input) is { } error) return Results.BadRequest(error);
             db.Transactions.Add(input);
             await db.SaveChangesAsync();
             return Results.Created($"/transactions/{input.Id}", TransactionDto.From(input));
+        });
+
+        // Editar recalcula los impactos en caja; saldos, resúmenes de tarjeta, proyecciones y presupuesto vs. real
+        // se calculan al leer, así que reflejan el cambio sin más pasos.
+        tx.MapPut("/{id:int}", async (int id, NewTransactionDto body, FinanzasDbContext db) =>
+        {
+            var t = await db.Transactions.Include(x => x.Impacts).FirstOrDefaultAsync(x => x.Id == id);
+            if (t is null) return Results.NotFound();
+            var edited = body.ToEntity();
+            // Lo que no viene en el formulario se conserva: el gasto fijo de origen, la importación y si es compromiso previo.
+            edited.RecurringRuleId = t.RecurringRuleId;
+            edited.ImportId = t.ImportId;
+            edited.IsPriorCommitment = t.IsPriorCommitment;
+            if (await BuildImpacts(db, edited) is { } error) return Results.BadRequest(error);
+
+            db.CashImpacts.RemoveRange(t.Impacts);
+            t.Scope = edited.Scope; t.PersonId = edited.PersonId; t.OperationTypeId = edited.OperationTypeId; t.OperationType = edited.OperationType;
+            t.Date = edited.Date; t.Description = edited.Description; t.CategoryId = edited.CategoryId; t.Amount = edited.Amount;
+            t.PaymentMethodId = edited.PaymentMethodId; t.Installments = edited.Installments; t.FirstDueDate = edited.FirstDueDate;
+            t.Status = edited.Status; t.PaidCardId = edited.PaidCardId;
+            t.Impacts = edited.Impacts;
+            await db.SaveChangesAsync();
+            return Results.Ok(TransactionDto.From(t));
         });
 
         tx.MapPost("/{id:int}/confirm", async (int id, ConfirmRequest? req, FinanzasDbContext db) =>
@@ -199,9 +238,10 @@ public static class Endpoints
             return Results.Ok(TransactionDto.From(t));
         });
 
+        // Borrar se lleva sus impactos en caja: la caja, el resumen de tarjeta y el presupuesto dejan de contarlo.
         tx.MapDelete("/{id:int}", async (int id, FinanzasDbContext db) =>
         {
-            var t = await db.Transactions.FindAsync(id);
+            var t = await db.Transactions.Include(x => x.Impacts).FirstOrDefaultAsync(x => x.Id == id);
             if (t is null) return Results.NotFound();
             db.Transactions.Remove(t);
             await db.SaveChangesAsync();

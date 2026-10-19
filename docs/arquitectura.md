@@ -63,6 +63,17 @@ sequenceDiagram
   App->>App: Invalida dashboard, flujo de caja, reportes y ahorro
 ```
 
+## Editar o borrar un movimiento
+
+`PUT /transactions/{id}` recibe el mismo cuerpo que el alta y pasa por las mismas validaciones. Borra los
+`CashImpacts` del movimiento y los vuelve a armar con `CashImpactBuilder` (con tarjeta, si no viene el vencimiento se
+propone según los cierres; sin tarjeta, queda en una cuota y sin vencimiento). `DELETE /transactions/{id}` borra el
+movimiento con sus impactos. No hay saldos guardados: caja actual, fin de mes, trimestral, pagos de tarjeta y
+presupuesto vs. real se calculan al leer, así que reflejan el cambio en la siguiente consulta.
+
+Un previsto generado por un gasto fijo conserva el vínculo con su regla al editarlo. Si después se edita el gasto fijo
+(o los cierres de su tarjeta), sus previstos desde el inicio de la regla se vuelven a generar.
+
 El dashboard (`GET /dashboard`) recorre el camino inverso: carga movimientos con sus impactos, cajas, resúmenes,
 presupuestos y gastos fijos, y `CashFlowCalculator` calcula caja al corte, fin de mes, trimestral y pagos de tarjeta.
 
@@ -129,7 +140,7 @@ Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`fami
 | `GET /openapi/v1.json` | Especificación OpenAPI generada |
 | `GET /dashboard?scope&date` | Caja al corte (hoy por defecto), fin de mes, trimestral, gasto estimado de meses futuros, Memey, pagos de tarjeta por mes |
 | `GET /cashflow?scope&date&until` | Flujo de caja del mes del corte con saldo acumulado: cierra en la caja actual y en la de fin de mes |
-| `GET/POST /transactions`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` | Movimientos |
+| `GET/POST /transactions`, `GET/PUT/DELETE /transactions/{id}`, `POST /transactions/{id}/confirm` | Movimientos. Editar o borrar rehace sus impactos en caja: saldos, resúmenes de tarjeta, proyecciones y presupuesto vs. real se recalculan al leer |
 | `GET /cards/{id}/due-date?purchaseDate`, `GET/PUT /cards/{id}/cycles` | Vencimiento propuesto y cierres mes a mes |
 | `GET/POST /recurring-rules`, `PUT/DELETE /recurring-rules/{id}` | Gastos fijos con monto vigente por mes |
 | `GET/PUT /budgets/{month}` | Presupuesto mensual por categoría |

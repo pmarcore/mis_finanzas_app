@@ -390,7 +390,7 @@ classDiagram
         <<static>>
         +MapDashboard(app)
         +MapCashFlow(app)
-        +MapTransactions(app)
+        +MapTransactions(app) GET/POST/PUT/DELETE /transactions
         +MapCards(app)
         +MapRecurringRules(app)
         +MapBudgets(app)

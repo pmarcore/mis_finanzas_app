@@ -7,6 +7,7 @@ import { useScope } from '../state/scope';
 import { scopeColor, useTheme } from '../theme';
 import { AhorroScreen } from '../screens/AhorroScreen';
 import { CategoriasScreen } from '../screens/CategoriasScreen';
+import { EditarMovimientoScreen } from '../screens/EditarMovimientoScreen';
 import { ConfiguracionScreen } from '../screens/ConfiguracionScreen';
 import { FijosScreen } from '../screens/FijosScreen';
 import { InicioScreen } from '../screens/InicioScreen';
@@ -100,6 +101,7 @@ export function RootNavigator() {
       <Stack.Screen name="Categorias" component={CategoriasScreen} options={{ title: 'Categorías' }} />
       <Stack.Screen name="MediosPago" component={MediosPagoScreen} options={{ title: 'Medios de pago' }} />
       <Stack.Screen name="Ahorro" component={AhorroScreen} options={{ title: 'Ahorro e inversión' }} />
+      <Stack.Screen name="EditarMovimiento" component={EditarMovimientoScreen} options={{ title: 'Editar movimiento' }} />
     </Stack.Navigator>
   );
 }
