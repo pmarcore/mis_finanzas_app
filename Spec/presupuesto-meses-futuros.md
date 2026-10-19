@@ -1,6 +1,6 @@
 # Spec: presupuestar meses futuros
 
-Estado: **borrador, pendiente de aprobación de Pablo**
+Estado: **aprobada** (PR 14, 2026-10-19)
 Pedido: Pablo, 2026-10-19 (hilo "Presupuestar meses futuros")
 
 ## Objetivo

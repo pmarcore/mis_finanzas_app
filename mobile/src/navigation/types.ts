@@ -22,6 +22,8 @@ export type RootStackParamList = {
   Reporte: { month?: string; scope?: Scope } | undefined;
   /** Movimientos que forman el real de una categoría del presupuesto vs. real en un mes al corte. */
   MovimientosCategoria: { categoryId: number; category: string; month: string; cutoff: string; scope: Scope };
+  /** Borrador del presupuesto de meses futuros a partir de un mes de la entidad. */
+  ProyectarPresupuesto: { scope: Scope; month: string };
   Tarjetas: undefined;
   Configuracion: undefined;
   TiposOperacion: undefined;

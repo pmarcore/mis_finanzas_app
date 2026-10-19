@@ -53,12 +53,14 @@ flowchart LR
     Ahorro["Ahorro e inversión"]
     EditarMovimiento["Editar movimiento"]
     MovimientosCategoria["Movimientos de una categoría"]
+    ProyectarPresupuesto["Proyectar presupuesto"]
   end
   Inicio -->|Caja actual / Fin de mes / Caja Memey| Movimientos
   Inicio --> Tarjetas
   Inicio --> Reporte
   Inicio --> Ahorro
   Presupuesto --> Reporte
+  Presupuesto --> ProyectarPresupuesto
   Reporte -->|tocar una categoría| MovimientosCategoria
   MovimientosCategoria -->|tocar un movimiento| EditarMovimiento
   Nuevo -->|al guardar| Movimientos
@@ -82,7 +84,8 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 | Editar movimiento | El mismo formulario que el alta, precargado; guardar o borrar con confirmación | `GET/PUT/DELETE /transactions/{id}`, `GET /cards/{id}/due-date` |
 | Nuevo movimiento | Alta con tipo, categoría, medio, cuotas y vencimiento propuesto | `POST /transactions`, `GET /cards/{id}/due-date` |
 | Fijos | Gastos fijos con vigencia desde-hasta, cambios de monto e incrementos % por mes, y proyección mes a mes en el formulario | `GET/POST/PUT/DELETE /recurring-rules` |
-| Presupuesto | Presupuesto mensual por categoría, uno para Familia y otro para Memey (selector arriba); muestra el total | `GET/PUT /budgets/{month}?scope` |
+| Presupuesto | Presupuesto mensual por categoría, uno para Familia y otro para Memey (selector arriba); muestra el total. Si el mes hereda el de un mes anterior lo avisa y precarga esos montos | `GET/PUT /budgets/{month}?scope`, `GET /budgets/{month}/source` |
+| Proyectar presupuesto | Borrador de meses futuros: fuente (presupuesto de un mes o real de un mes cerrado), usar gastos fijos, ajuste %, desde/hasta; se edita mes a mes y se guardan todos juntos | `GET /budgets/proposal`, `PUT /budgets` |
 | Presupuesto vs. real | Reporte de una entidad (Familia o Memey) con fecha de corte y alertas; tocar una categoría abre sus movimientos | `GET /reports/budget-vs-actual` |
 | Movimientos de una categoría | Los movimientos que suman el real de la categoría en el mes al corte, con el total; tocar uno abre Editar movimiento | `GET /reports/budget-vs-actual/{categoryId}/transactions` |
 | Tarjetas | Cierres y vencimientos por tarjeta | `GET /cards/{id}/cycles` |
