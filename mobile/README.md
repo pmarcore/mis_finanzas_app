@@ -62,7 +62,7 @@ La fuente de verdad es `backend/src/Finanzas.Api/Endpoints.cs` y `Dtos.cs`; `src
   - Categorías: `kind` `ingreso` | `gasto`; `budgetType` `fijo` | `variable` | `deuda`.
 - Compra con tarjeta: `firstDueDate` es opcional (el backend lo propone con los cierres; si falta el cierre responde 400 con un mensaje).
 - `pagoTarjeta`: requiere `paidCardId` y `firstDueDate` (vencimiento que se paga).
-- `POST/PUT /recurring-rules` devuelven `{ rule, missingCycles }`; la app avisa si faltan cierres.
+- `POST/PUT /recurring-rules` devuelven `{ rule, missingCycles }`; la app avisa si faltan cierres. Cada cambio de `amounts` es un monto o un incremento (`increasePercent`); en los incrementos la API devuelve en `amount` el monto resultante.
 - `GET/PUT /budgets/{month}?scope=familia|memey`: el presupuesto es por entidad; el PUT reemplaza solo el de esa entidad.
 - `GET /transactions` acepta además `categoryId` y `paymentMethodId` para filtrar el listado.
 - `GET /reports/budget-vs-actual/{categoryId}/transactions?month&cutoff` devuelve los movimientos que forman el real de una fila.

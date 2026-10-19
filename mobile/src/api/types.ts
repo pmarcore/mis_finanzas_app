@@ -163,9 +163,14 @@ export interface ConfirmTransaction {
   amount?: number;
 }
 
+/**
+ * Cambio desde un mes: un monto fijo, o un incremento % (increasePercent) sobre el monto vigente.
+ * En los incrementos el backend devuelve en amount el monto resultante; al guardar lo ignora.
+ */
 export interface RecurringAmount {
   fromMonth: Month;
   amount: number;
+  increasePercent?: number | null;
 }
 
 export interface RecurringRule {

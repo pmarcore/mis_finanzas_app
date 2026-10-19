@@ -87,6 +87,14 @@ export function parseAmount(text: string): number | null {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 
+/** "2,5" o "2.5" → 2.5 (porcentajes: el punto es decimal, no separador de miles). */
+export function parsePercent(text: string): number | null {
+  const clean = text.replace(/[%\s]/g, '').replace(',', '.');
+  if (!clean) return null;
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** 1234.5 → "1234,5" para precargar inputs editables. */
 export function amountToInput(n: number | null | undefined): string {
   return n === null || n === undefined ? '' : String(n).replace('.', ',');

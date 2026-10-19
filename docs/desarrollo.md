@@ -47,6 +47,7 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 | `CashFlowTests.cs` | Reglas del dominio sin base: vencimiento propuesto, cuotas y redondeo, compra con tarjeta que no toca caja hasta el vencimiento, resumen real vs modelado, pago parcial, transferencias, gastos fijos, tipos configurables, ahorro |
 | `PlanillaOctubreTests.cs` | Levanta la API en memoria (`WebApplicationFactory`) con una base SQLite temporal, importa `data/import/planilla-2026-10.json` y compara caja, pagos de tarjeta, presupuesto vs real, proyección y flujo de caja contra los valores de la planilla al 08/10/2026 |
 | `ConfiguracionTests.cs` | Tipos de operación por ámbito, cambio de efecto que recalcula movimientos, ahorro e inversión aparte de la caja, alta y desactivación de categorías y medios de pago |
+| `VigenciaEIncrementosTests.cs` | Gastos fijos con vigencia desde-hasta e incrementos % acumulados: montos por mes, previstos generados por la API y validaciones (primer cambio es un monto, hasta no anterior a desde) |
 | `PresupuestoPorEntidadTests.cs` | Presupuesto de Familia y de Memey guardados y reportados por separado, detalle de movimientos de una categoría del presupuesto vs. real (suma igual al real) y filtros del listado por categoría y medio de pago |
 
 La app se valida con `cd mobile && npx tsc --noEmit` (`npm run typecheck`).
