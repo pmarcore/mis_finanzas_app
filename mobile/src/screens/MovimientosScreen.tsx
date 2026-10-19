@@ -15,6 +15,7 @@ import type { CashFlowLine, Id, OperationType, Transaction } from '../api/types'
 import { MoneyText } from '../components/MoneyText';
 import { QueryState } from '../components/QueryState';
 import { ScopeSelector } from '../components/ScopeSelector';
+import { Select } from '../components/Select';
 import { Segmented } from '../components/Segmented';
 import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
@@ -35,9 +36,16 @@ export function MovimientosScreen({ route, navigation }: TabScreenProps<'Movimie
   const marca = params?.vista === 'caja' ? params : undefined;
   // Mes de la fecha de corte; el backend filtra.
   const month = monthOf(cutoff);
+  // Filtros opcionales del listado (vacío = todos); se combinan con el ámbito y el mes.
+  const [categoryId, setCategoryId] = useState<Id | undefined>();
+  const [paymentMethodId, setPaymentMethodId] = useState<Id | undefined>();
   // `from` y `to` son inclusivos en el backend.
-  const q = useTransactions({ scope, from: `${month}-01`, to: endOfMonth(month) });
+  const q = useTransactions({ scope, from: `${month}-01`, to: endOfMonth(month), categoryId, paymentMethodId });
   const categories = useCategories();
+  const scopeCategories = useMemo(() => (categories.data ?? []).filter((c) => c.scope === scope), [categories.data, scope]);
+  // Las categorías son de un ámbito: al cambiar de ámbito se limpia el filtro.
+  useEffect(() => setCategoryId(undefined), [scope]);
+  const filtered = categoryId !== undefined || paymentMethodId !== undefined;
   const methods = usePaymentMethods();
   const types = useOperationTypes();
   const confirm = useConfirmTransaction();
@@ -124,25 +132,57 @@ export function MovimientosScreen({ route, navigation }: TabScreenProps<'Movimie
           typeOf={typeOf}
         />
       ) : (
-        <QueryState
-          isLoading={q.isLoading}
-          error={q.error}
-          onRetry={q.refetch}
-          isEmpty={q.data?.length === 0}
-          emptyText="No hay movimientos este mes."
-        >
-          <Text style={{ color: colors.inkMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
-            Tocá un movimiento para editarlo o borrarlo.
-          </Text>
-          <FlatList
-            data={q.data ?? []}
-            keyExtractor={(t) => String(t.id)}
-            renderItem={renderItem}
-            contentContainerStyle={styles.list}
-            refreshing={q.isRefetching}
-            onRefresh={q.refetch}
-          />
-        </QueryState>
+        <>
+          <View style={styles.filters}>
+            <View style={{ flex: 1 }}>
+              <Select
+                title="Filtrar por medio de pago"
+                items={methods.data ?? []}
+                getKey={(m) => m.id}
+                getLabel={(m) => m.name}
+                selectedKey={paymentMethodId}
+                onSelect={(m) => setPaymentMethodId(m.id)}
+                placeholder="Todos los medios"
+                clearLabel="Todos los medios"
+                onClear={() => setPaymentMethodId(undefined)}
+                accent={scopeColor(colors, scope)}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Select
+                title="Filtrar por categoría"
+                items={scopeCategories}
+                getKey={(c) => c.id}
+                getLabel={(c) => c.name}
+                selectedKey={categoryId}
+                onSelect={(c) => setCategoryId(c.id)}
+                placeholder="Todas las categorías"
+                clearLabel="Todas las categorías"
+                onClear={() => setCategoryId(undefined)}
+                accent={scopeColor(colors, scope)}
+              />
+            </View>
+          </View>
+          <QueryState
+            isLoading={q.isLoading}
+            error={q.error}
+            onRetry={q.refetch}
+            isEmpty={q.data?.length === 0}
+            emptyText={filtered ? 'No hay movimientos con esos filtros este mes.' : 'No hay movimientos este mes.'}
+          >
+            <Text style={{ color: colors.inkMuted, fontSize: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
+              Tocá un movimiento para editarlo o borrarlo.
+            </Text>
+            <FlatList
+              data={q.data ?? []}
+              keyExtractor={(t) => String(t.id)}
+              renderItem={renderItem}
+              contentContainerStyle={styles.list}
+              refreshing={q.isRefetching}
+              onRefresh={q.refetch}
+            />
+          </QueryState>
+        </>
       )}
     </View>
   );
@@ -289,6 +329,7 @@ function FlujoDeCaja({
 
 const styles = StyleSheet.create({
   header: { padding: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm },
+  filters: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.sm },
   row: {
     flexDirection: 'row',
