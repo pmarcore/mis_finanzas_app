@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 import {
   useCardCycles,
   useCardDueDate,
   useCategories,
   useCreateTransaction,
+  useDeleteTransaction,
   useOperationTypes,
   usePaymentMethods,
   usePeople,
+  useUpdateTransaction,
 } from '../api/endpoints';
 import {
   SCOPE_LABELS,
@@ -18,6 +20,7 @@ import {
   type NewTransaction,
   type OperationType,
   type Scope,
+  type Transaction,
   type TransactionStatus,
 } from '../api/types';
 import { Card } from '../components/Card';
@@ -29,7 +32,8 @@ import { Select } from '../components/Select';
 import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
-import { addMonths, formatDate, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
+import { Alert } from '../utils/alert';
+import { addMonths, amountToInput, formatDate, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
 
 /** Tipo propuesto al abrir o al cambiar de destino: el primer gasto común ofrecido, si no el primero. */
 function defaultType(types: OperationType[]): OperationType | undefined {
@@ -37,6 +41,22 @@ function defaultType(types: OperationType[]): OperationType | undefined {
 }
 
 export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
+  return <MovimientoForm onSaved={() => navigation.navigate('Movimientos')} />;
+}
+
+/**
+ * Alta o edición de un movimiento. Con `initial` edita: el backend rehace sus impactos en caja y en los resúmenes,
+ * y permite borrarlo (con confirmación).
+ */
+export function MovimientoForm({
+  initial,
+  onSaved,
+  onDeleted,
+}: {
+  initial?: Transaction;
+  onSaved: () => void;
+  onDeleted?: () => void;
+}) {
   const { colors } = useTheme();
   const { scope: currentScope } = useScope();
 
@@ -45,26 +65,34 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const paymentMethods = usePaymentMethods();
   const operationTypes = useOperationTypes();
   const create = useCreateTransaction();
+  const update = useUpdateTransaction();
+  const remove = useDeleteTransaction();
+  const save = initial ? update : create;
 
-  const [operationTypeId, setOperationTypeId] = useState<Id>();
-  const [status, setStatus] = useState<TransactionStatus>('realizado');
-  const [amountText, setAmountText] = useState('');
-  const [description, setDescription] = useState('');
-  const [scope, setScope] = useState<Scope>(currentScope);
-  const [personId, setPersonId] = useState<Id>();
-  const [date, setDate] = useState<ISODate>(todayISO);
-  const [categoryId, setCategoryId] = useState<Id>();
-  const [paymentMethodId, setPaymentMethodId] = useState<Id>();
-  const [installmentsText, setInstallmentsText] = useState('1');
-  const [firstDueDate, setFirstDueDate] = useState('');
-  const [dueEdited, setDueEdited] = useState(false);
-  const [paidCardId, setPaidCardId] = useState<Id>();
+  const [operationTypeId, setOperationTypeId] = useState<Id | undefined>(initial?.operationTypeId);
+  const [status, setStatus] = useState<TransactionStatus>(initial?.status ?? 'realizado');
+  const [amountText, setAmountText] = useState(amountToInput(initial?.amount));
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [scope, setScope] = useState<Scope>(initial?.scope ?? currentScope);
+  const [personId, setPersonId] = useState<Id | undefined>(initial?.personId);
+  const [date, setDate] = useState<ISODate>(initial?.date ?? todayISO);
+  const [categoryId, setCategoryId] = useState<Id | undefined>(initial?.categoryId ?? undefined);
+  const [paymentMethodId, setPaymentMethodId] = useState<Id | undefined>(initial?.paymentMethodId);
+  const [installmentsText, setInstallmentsText] = useState(String(initial?.installments ?? 1));
+  const [firstDueDate, setFirstDueDate] = useState(initial?.firstDueDate ?? '');
+  // Al editar, el vencimiento guardado se respeta hasta que cambie la fecha, el medio o el tipo.
+  const [dueEdited, setDueEdited] = useState(!!initial?.firstDueDate);
+  const [paidCardId, setPaidCardId] = useState<Id | undefined>(initial?.paidCardId ?? undefined);
   const [submitted, setSubmitted] = useState(false);
 
   // Tipos configurados para el destino elegido (Configuración → Tipos de operación).
+  // Al editar se ofrece también el tipo original aunque se haya desactivado; lo mismo con categoría y medio.
   const offeredTypes = useMemo(
-    () => (operationTypes.data ?? []).filter((t) => t.active && t.scopes.includes(scope)),
-    [operationTypes.data, scope],
+    () =>
+      (operationTypes.data ?? []).filter(
+        (t) => (t.active || t.id === initial?.operationTypeId) && t.scopes.includes(scope),
+      ),
+    [operationTypes.data, scope, initial?.operationTypeId],
   );
   const type = offeredTypes.find((t) => t.id === operationTypeId);
   useEffect(() => {
@@ -76,13 +104,20 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
   const isCommon = type?.kind === 'movimiento';
   const kind: CategoryKind = type?.effect === 'suma' ? 'ingreso' : 'gasto';
   const visibleCategories = useMemo(
-    () => (isCommon ? (categories.data ?? []).filter((c) => c.active && c.kind === kind && c.scope === scope) : []),
-    [categories.data, kind, scope, isCommon],
+    () =>
+      isCommon
+        ? (categories.data ?? []).filter(
+            (c) => (c.active || c.id === initial?.categoryId) && c.kind === kind && c.scope === scope,
+          )
+        : [],
+    [categories.data, kind, scope, isCommon, initial?.categoryId],
   );
   const allMethods = paymentMethods.data ?? [];
   const cards = allMethods.filter((m) => m.isCard);
   // Pagos de tarjeta, transferencias, ahorro e inversión salen de una caja: no se pagan con tarjeta.
-  const visibleMethods = allMethods.filter((m) => m.active && (isCommon || !m.isCard));
+  const visibleMethods = allMethods.filter(
+    (m) => (m.active || m.id === initial?.paymentMethodId) && (isCommon || !m.isCard),
+  );
   const method = allMethods.find((m) => m.id === paymentMethodId);
   const isCardPurchase = !isCardPayment && !!method?.isCard;
 
@@ -95,7 +130,12 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
     [paidCycles.data, date],
   );
 
+  // El vencimiento se vuelve a proponer solo cuando cambia algo de lo que depende (no al abrir para editar).
+  const dueInputs = useRef([paymentMethodId, date, operationTypeId, paidCardId]);
   useEffect(() => {
+    const next = [paymentMethodId, date, operationTypeId, paidCardId];
+    if (next.every((v, i) => v === dueInputs.current[i])) return;
+    dueInputs.current = next;
     setDueEdited(false);
     setFirstDueDate('');
   }, [paymentMethodId, date, operationTypeId, paidCardId]);
@@ -103,14 +143,16 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
     if (isCardPurchase && !dueEdited && !firstDueDate && due.data?.firstDueDate) setFirstDueDate(due.data.firstDueDate);
   }, [isCardPurchase, dueEdited, firstDueDate, due.data?.firstDueDate]);
 
-  // Si cambia la operación/destino y la categoría o el medio ya no aplican, se limpian.
+  // Si cambia la operación/destino y la categoría o el medio ya no aplican, se limpian (una vez cargados los catálogos).
+  const catalogsReady = !!type && !!categories.data && !!paymentMethods.data;
   useEffect(() => {
-    if (categoryId !== undefined && !visibleCategories.some((c) => c.id === categoryId)) setCategoryId(undefined);
-  }, [visibleCategories, categoryId]);
+    if (catalogsReady && categoryId !== undefined && !visibleCategories.some((c) => c.id === categoryId))
+      setCategoryId(undefined);
+  }, [catalogsReady, visibleCategories, categoryId]);
   useEffect(() => {
-    if (paymentMethodId !== undefined && !visibleMethods.some((m) => m.id === paymentMethodId))
+    if (catalogsReady && paymentMethodId !== undefined && !visibleMethods.some((m) => m.id === paymentMethodId))
       setPaymentMethodId(undefined);
-  }, [visibleMethods, paymentMethodId]);
+  }, [catalogsReady, visibleMethods, paymentMethodId]);
 
   const amount = parseAmount(amountText);
   const installments = Number.parseInt(installmentsText, 10);
@@ -162,12 +204,34 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
       status,
       paidCardId: isCardPayment ? paidCardId : undefined,
     };
-    create.mutate(tx, {
+    const done = {
       onSuccess: () => {
-        reset();
-        navigation.navigate('Movimientos');
+        if (!initial) reset();
+        onSaved();
       },
-    });
+    };
+    if (initial) update.mutate({ id: initial.id, ...tx }, done);
+    else create.mutate(tx, done);
+  };
+
+  const askDelete = () => {
+    if (!initial) return;
+    Alert.alert(
+      'Borrar movimiento',
+      `¿Borrar "${initial.description || type?.name || 'movimiento'}"? Se recalculan la caja, los resúmenes de tarjeta y el presupuesto.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Borrar',
+          style: 'destructive',
+          onPress: () =>
+            remove.mutate(initial.id, {
+              onSuccess: () => onDeleted?.(),
+              onError: (e) => Alert.alert('No se pudo borrar', e.message),
+            }),
+        },
+      ],
+    );
   };
 
   const accent = scopeColor(colors, scope);
@@ -323,23 +387,37 @@ export function NuevoMovimientoScreen({ navigation }: TabScreenProps<'Nuevo'>) {
         </Card>
       )}
 
-      {create.error && (
-        <Text style={{ color: colors.bad }}>No se pudo guardar: {create.error.message}</Text>
+      {initial?.recurringRuleId != null && (
+        <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
+          Viene de un gasto fijo: el cambio vale para este mes. Si después editás el gasto fijo en Fijos, sus previstos se vuelven a generar.
+        </Text>
       )}
+
+      {save.error && <Text style={{ color: colors.bad }}>No se pudo guardar: {save.error.message}</Text>}
 
       <Pressable
         onPress={onSubmit}
-        disabled={create.isPending}
-        style={[styles.submit, { backgroundColor: accent, opacity: create.isPending ? 0.6 : 1 }]}
+        disabled={save.isPending}
+        style={[styles.submit, { backgroundColor: accent, opacity: save.isPending ? 0.6 : 1 }]}
       >
-        {create.isPending ? (
+        {save.isPending ? (
           <ActivityIndicator color={colors.surface} />
         ) : (
           <Text style={[styles.submitText, { color: colors.surface }]}>
-            Guardar {type ? type.name.toLowerCase() : 'movimiento'}
+            {initial ? 'Guardar cambios' : `Guardar ${type ? type.name.toLowerCase() : 'movimiento'}`}
           </Text>
         )}
       </Pressable>
+
+      {initial && (
+        <Pressable
+          onPress={askDelete}
+          disabled={remove.isPending}
+          style={[styles.submit, { borderWidth: 1, borderColor: colors.bad, opacity: remove.isPending ? 0.6 : 1 }]}
+        >
+          <Text style={[styles.submitText, { color: colors.bad }]}>Borrar movimiento</Text>
+        </Pressable>
+      )}
     </Screen>
   );
 }

@@ -51,6 +51,7 @@ flowchart LR
     Categorias["Categorías"]
     MediosPago["Medios de pago"]
     Ahorro["Ahorro e inversión"]
+    EditarMovimiento["Editar movimiento"]
   end
   Inicio -->|Caja actual / Fin de mes / Caja Memey| Movimientos
   Inicio --> Tarjetas
@@ -58,6 +59,7 @@ flowchart LR
   Inicio --> Ahorro
   Presupuesto --> Reporte
   Nuevo -->|al guardar| Movimientos
+  Movimientos -->|tocar un movimiento| EditarMovimiento
   Tarjetas --> Configuracion
   Tabs -->|engranaje| Configuracion
   Configuracion --> TiposOperacion
@@ -73,7 +75,8 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 | Pantalla | Para qué | Endpoints |
 | --- | --- | --- |
 | Inicio | Caja actual, fin de mes, trimestral, Memey, pagos de tarjeta, ahorro | `GET /dashboard`, `GET /savings` |
-| Movimientos | Lista de movimientos y flujo de caja con saldo acumulado; confirmar o borrar previstos | `GET /transactions`, `GET /cashflow`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` |
+| Movimientos | Lista de movimientos y flujo de caja con saldo acumulado; confirmar previstos; tocar un movimiento abre Editar movimiento (mantener apretado lo borra) | `GET /transactions`, `GET /cashflow`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` |
+| Editar movimiento | El mismo formulario que el alta, precargado; guardar o borrar con confirmación | `GET/PUT/DELETE /transactions/{id}`, `GET /cards/{id}/due-date` |
 | Nuevo movimiento | Alta con tipo, categoría, medio, cuotas y vencimiento propuesto | `POST /transactions`, `GET /cards/{id}/due-date` |
 | Fijos | Gastos fijos con monto vigente por mes | `GET/POST/PUT/DELETE /recurring-rules` |
 | Presupuesto | Presupuesto mensual por categoría | `GET/PUT /budgets/{month}` |

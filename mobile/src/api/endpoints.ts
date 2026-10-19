@@ -93,10 +93,26 @@ function useInvalidateMovements() {
     ]);
 }
 
+export function useTransaction(id: Id) {
+  return useQuery({
+    queryKey: ['transactions', 'detalle', id] as const,
+    queryFn: ({ signal }) => api.get<Transaction>(`/transactions/${id}`, undefined, signal),
+  });
+}
+
 export function useCreateTransaction() {
   const invalidate = useInvalidateMovements();
   return useMutation({
     mutationFn: (tx: NewTransaction) => api.post<Transaction>('/transactions', tx),
+    onSuccess: invalidate,
+  });
+}
+
+/** PUT /transactions/{id}: mismo cuerpo que el alta; el backend rehace los impactos en caja y en los resúmenes. */
+export function useUpdateTransaction() {
+  const invalidate = useInvalidateMovements();
+  return useMutation({
+    mutationFn: ({ id, ...tx }: { id: Id } & NewTransaction) => api.put<Transaction>(`/transactions/${id}`, tx),
     onSuccess: invalidate,
   });
 }
