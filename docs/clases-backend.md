@@ -253,6 +253,8 @@ classDiagram
     class Budgeting {
         <<static>>
         +ConsumesBudget(t) bool
+        +OfScope(budgets, categories, scope) List~Budget~
+        +ActualTransactions(transactions, scope, month, cutoff) IEnumerable~Transaction~
         +BudgetsFor(budgets, month) IReadOnlyList~Budget~
         +Report(categories, budgets, transactions, scope, month, cutoff, settings) List~BudgetRow~
         +AlertFor(pct, projectsExcess, settings) string

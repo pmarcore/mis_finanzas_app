@@ -12,7 +12,27 @@ public static class Budgeting
     public static bool ConsumesBudget(Transaction t) =>
         t.OperationType.IsExpense && t.Status == TransactionStatus.Realizado && !t.IsPriorCommitment;
 
-    /// <summary>Presupuesto vigente de un mes: el del mes o, si no se cargó, el último mes anterior cargado.</summary>
+    /// <summary>
+    /// Presupuesto de un ámbito: cada categoría es de Familia o de Memey, así que el presupuesto queda separado por la categoría.
+    /// Se filtra antes de buscar el mes vigente para que cargar uno no tape al otro.
+    /// </summary>
+    public static List<Budget> OfScope(IEnumerable<Budget> budgets, IEnumerable<Category> categories, Scope scope)
+    {
+        var ids = categories.Where(c => c.Scope == scope).Select(c => c.Id).ToHashSet();
+        return budgets.Where(b => ids.Contains(b.CategoryId)).ToList();
+    }
+
+    /// <summary>Movimientos que forman el real de una categoría en un mes al corte (lo que suma la columna Real del reporte).</summary>
+    public static IEnumerable<Transaction> ActualTransactions(IEnumerable<Transaction> transactions, Scope scope, DateOnly month, DateOnly cutoff)
+    {
+        var first = new DateOnly(month.Year, month.Month, 1);
+        var last = first.AddDays(DateTime.DaysInMonth(month.Year, month.Month) - 1);
+        var upTo = cutoff < last ? cutoff : last;
+        return transactions.Where(t => t.Scope == scope && ConsumesBudget(t) && t.CategoryId is not null && t.Date >= first && t.Date <= upTo);
+    }
+
+    /// <summary>Presupuesto vigente de un mes: el del mes o, si no se cargó, el último mes anterior cargado.
+    /// Recibe el presupuesto de un solo ámbito (ver <see cref="OfScope"/>).</summary>
     public static IReadOnlyList<Budget> BudgetsFor(IEnumerable<Budget> budgets, DateOnly month)
     {
         var latest = budgets.Where(b => b.Month <= month).Select(b => b.Month).DefaultIfEmpty().Max();
@@ -31,10 +51,9 @@ public static class Budgeting
         var days = DateTime.DaysInMonth(month.Year, month.Month);
         var last = first.AddDays(days - 1);
         var upTo = cutoff < last ? cutoff : last;
-        var monthBudgets = BudgetsFor(budgets, first).ToDictionary(b => b.CategoryId, b => b.Amount);
+        var monthBudgets = BudgetsFor(OfScope(budgets, categories, scope), first).ToDictionary(b => b.CategoryId, b => b.Amount);
 
-        var actuals = transactions
-            .Where(t => t.Scope == scope && ConsumesBudget(t) && t.CategoryId is not null && t.Date >= first && t.Date <= upTo)
+        var actuals = ActualTransactions(transactions, scope, first, cutoff)
             .GroupBy(t => t.CategoryId!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(t => t.Amount));
 
@@ -72,6 +91,7 @@ public static class Budgeting
         Scope scope, DateOnly cutoff, DateOnly until)
     {
         var expenseCats = categories.Where(c => c.Scope == scope && c.Kind == CategoryKind.Gasto).Select(c => c.Id).ToHashSet();
+        var scopeBudgets = OfScope(budgets, categories, scope);
         var result = new List<BudgetEstimate>();
         for (var m = new DateOnly(cutoff.Year, cutoff.Month, 1).AddMonths(1); m <= until; m = m.AddMonths(1))
         {
@@ -79,7 +99,7 @@ public static class Budgeting
                 .Where(r => r.Scope == scope && r.OperationType.IsExpense && r.StartMonth <= m && (r.EndMonth is null || r.EndMonth >= m))
                 .GroupBy(r => r.CategoryId)
                 .ToDictionary(g => g.Key, g => g.Sum(r => RecurringRuleExpander.AmountFor(r, m)));
-            var amount = BudgetsFor(budgets, m)
+            var amount = BudgetsFor(scopeBudgets, m)
                 .Where(b => expenseCats.Contains(b.CategoryId))
                 .Sum(b => Math.Max(0, b.Amount - covered.GetValueOrDefault(b.CategoryId)));
             var date = new DateOnly(m.Year, m.Month, 20);

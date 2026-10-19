@@ -140,11 +140,12 @@ Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`fami
 | `GET /openapi/v1.json` | Especificación OpenAPI generada |
 | `GET /dashboard?scope&date` | Caja al corte (hoy por defecto), fin de mes, trimestral, gasto estimado de meses futuros, Memey, pagos de tarjeta por mes |
 | `GET /cashflow?scope&date&until` | Flujo de caja del mes del corte con saldo acumulado: cierra en la caja actual y en la de fin de mes |
-| `GET/POST /transactions`, `GET/PUT/DELETE /transactions/{id}`, `POST /transactions/{id}/confirm` | Movimientos. Editar o borrar rehace sus impactos en caja: saldos, resúmenes de tarjeta, proyecciones y presupuesto vs. real se recalculan al leer |
+| `GET /transactions?scope&from&to&status&categoryId&paymentMethodId`, `POST /transactions`, `GET/PUT/DELETE /transactions/{id}`, `POST /transactions/{id}/confirm` | Movimientos. Editar o borrar rehace sus impactos en caja: saldos, resúmenes de tarjeta, proyecciones y presupuesto vs. real se recalculan al leer |
 | `GET /cards/{id}/due-date?purchaseDate`, `GET/PUT /cards/{id}/cycles` | Vencimiento propuesto y cierres mes a mes |
 | `GET/POST /recurring-rules`, `PUT/DELETE /recurring-rules/{id}` | Gastos fijos con monto vigente por mes |
-| `GET/PUT /budgets/{month}` | Presupuesto mensual por categoría |
-| `GET /reports/budget-vs-actual?month&cutoff&scope` | Presupuestado vs real con fecha de corte |
+| `GET/PUT /budgets/{month}?scope` | Presupuesto mensual por categoría de una entidad (Familia por defecto). Cada categoría es de un ámbito, así que el presupuesto se separa por la categoría; el PUT reemplaza solo el de esa entidad y rechaza categorías de la otra |
+| `GET /reports/budget-vs-actual?month&cutoff&scope` | Presupuestado vs real de una entidad con fecha de corte. Si una entidad no cargó el mes, usa su último mes cargado (sin mirar el de la otra) |
+| `GET /reports/budget-vs-actual/{categoryId}/transactions?month&cutoff` | Movimientos que forman el real de esa fila (gastos realizados del mes hasta el corte; con tarjeta, el día de la compra) |
 | `GET/PUT /settings`, `PUT /settings/cash-boxes/{id}` | Saldos iniciales, piso de caja y umbrales |
 | `GET /people` | Personas |
 | `GET/POST /operation-types?scope`, `PUT/DELETE /operation-types/{id}` | Tipos de operación. Cambiar el efecto recalcula sus movimientos |

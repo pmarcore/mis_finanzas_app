@@ -43,7 +43,7 @@ mobile/
     │   └── scope.tsx        # ámbito seleccionado (familia/memey) y fecha de corte
     ├── navigation/
     │   ├── RootNavigator.tsx  # tabs: Inicio, Movimientos, Nuevo, Fijos, Presupuesto
-    │   │                      # stack: Reporte, Tarjetas, Configuración (engranaje)
+    │   │                      # stack: Reporte, Movimientos de una categoría, Tarjetas, Configuración (engranaje)
     │   └── types.ts
     ├── screens/             # una pantalla por archivo
     ├── components/          # ScopeSelector, MoneyText, Card y otros básicos
@@ -63,6 +63,9 @@ La fuente de verdad es `backend/src/Finanzas.Api/Endpoints.cs` y `Dtos.cs`; `src
 - Compra con tarjeta: `firstDueDate` es opcional (el backend lo propone con los cierres; si falta el cierre responde 400 con un mensaje).
 - `pagoTarjeta`: requiere `paidCardId` y `firstDueDate` (vencimiento que se paga).
 - `POST/PUT /recurring-rules` devuelven `{ rule, missingCycles }`; la app avisa si faltan cierres.
+- `GET/PUT /budgets/{month}?scope=familia|memey`: el presupuesto es por entidad; el PUT reemplaza solo el de esa entidad.
+- `GET /transactions` acepta además `categoryId` y `paymentMethodId` para filtrar el listado.
+- `GET /reports/budget-vs-actual/{categoryId}/transactions?month&cutoff` devuelve los movimientos que forman el real de una fila.
 - `GET /reports/budget-vs-actual` devuelve `{ rows, totalBudget, totalActual, totalProjected, ... }` con una `alert` por fila.
 - `PUT /settings` guarda piso de caja, meta de ahorro y umbrales de alerta; cada caja se guarda con `PUT /settings/cash-boxes/{id}`.
 - Los errores 400/404 del backend son strings en español: el cliente los muestra tal cual (`ApiError.message`).

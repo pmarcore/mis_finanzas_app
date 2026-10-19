@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useBudgetVsActual } from '../api/endpoints';
 import { BUDGET_TYPE_LABELS, type BudgetAlert, type BudgetVsActualRow, type Month, type Scope } from '../api/types';
 import { Card } from '../components/Card';
@@ -37,19 +38,31 @@ const ALERT_LABELS: Record<BudgetAlert, string> = {
   'Proyecta exceso': 'Proyecta exceso',
 };
 
-export function ReporteScreen({ route }: RootStackScreenProps<'Reporte'>) {
+export function ReporteScreen({ route, navigation }: RootStackScreenProps<'Reporte'>) {
   const { cutoff, scope: currentScope } = useScope(); // corte por defecto hoy
   const { colors } = useTheme();
   const [month, setMonth] = useState<Month>(route.params?.month ?? monthOf(cutoff));
-  // El reporte es por ámbito; "total" lo toma el backend como familia.
-  const [scope, setScope] = useState<Scope>(currentScope === 'memey' ? 'memey' : 'familia');
+  // El reporte es por entidad: Familia y Memey nunca se mezclan.
+  const [scope, setScope] = useState<Scope>(route.params?.scope ?? currentScope);
   const q = useBudgetVsActual(month, cutoff, scope);
   const d = q.data;
 
   const Row = ({ r }: { r: BudgetVsActualRow }) => {
     const tint = alertColor(colors, r.alert);
+    // Tocar la categoría abre los movimientos que forman su real del mes.
     return (
-      <View style={[styles.row, { borderBottomColor: colors.border }]}>
+      <Pressable
+        onPress={() =>
+          navigation.navigate('MovimientosCategoria', {
+            categoryId: r.categoryId,
+            category: r.category,
+            month,
+            cutoff,
+            scope,
+          })
+        }
+        style={[styles.row, { borderBottomColor: colors.border }]}
+      >
         <View style={{ flex: 1 }}>
           <Text style={{ color: colors.ink, fontWeight: '600' }}>{r.category}</Text>
           <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
@@ -67,7 +80,8 @@ export function ReporteScreen({ route }: RootStackScreenProps<'Reporte'>) {
             <Text style={{ color: tint, fontSize: 11, fontWeight: '600' }}>{ALERT_LABELS[r.alert] ?? r.alert}</Text>
           </View>
         </View>
-      </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.inkMuted} />
+      </Pressable>
     );
   };
 
@@ -106,6 +120,7 @@ export function ReporteScreen({ route }: RootStackScreenProps<'Reporte'>) {
                 <MoneyText value={d.totalProjected} size="sm" />
               </View>
             </Card>
+            <Text style={{ color: colors.inkMuted, fontSize: 12 }}>Tocá una categoría para ver sus movimientos.</Text>
             <Card>
               {d.rows.map((r) => (
                 <Row key={r.categoryId} r={r} />
