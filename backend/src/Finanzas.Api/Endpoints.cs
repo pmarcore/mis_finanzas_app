@@ -306,8 +306,14 @@ public static class Endpoints
             if (a.IncreasePercent is { } pct ? pct <= -100 : a.Amount <= 0)
                 return a.IncreasePercent is null ? "Cada monto tiene que ser mayor a cero." : "El incremento tiene que ser mayor a -100%.";
         }
-        if (body.Amounts.MinBy(a => Months.Parse(a.FromMonth))!.IncreasePercent is not null)
+        var first = body.Amounts.MinBy(a => Months.Parse(a.FromMonth))!;
+        if (first.IncreasePercent is not null)
             return "El primer cambio tiene que ser un monto; los incrementos % se aplican sobre él.";
+        // Sin monto vigente, los meses entre el inicio y el primer cambio se proyectarían en $0.
+        if (Months.Parse(first.FromMonth) > start)
+            return $"El primer monto tiene que regir desde el mes de inicio ({body.StartMonth}); si no, esos meses quedan en $0.";
+        if (body.EndMonth is not null && months.Max() > Months.Parse(body.EndMonth))
+            return "Hay un cambio de monto posterior al mes hasta: nunca se aplicaría.";
         return null;
     }
 

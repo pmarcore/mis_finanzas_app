@@ -86,4 +86,19 @@ public class VigenciaEIncrementosTests : IClassFixture<PlanillaOctubreTests.Api>
         var backwards = await c.PostAsJsonAsync("/recurring-rules", Rule(1, Month(3), Month(1), new { fromMonth = Month(3), amount = 1_000m }));
         Assert.Equal(HttpStatusCode.BadRequest, backwards.StatusCode);
     }
+
+    [Fact]
+    public async Task The_first_amount_must_start_with_the_rule_and_no_change_can_come_after_the_end()
+    {
+        var c = api.CreateClient();
+        // Caso real: sueldo desde nov hasta ene con un único monto desde feb, que dejaba nov–ene en $0 en la proyección.
+        var late = await c.PostAsJsonAsync("/recurring-rules", Rule(1, Month(1), Month(3), new { fromMonth = Month(4), amount = 4_680_000m }));
+        Assert.Equal(HttpStatusCode.BadRequest, late.StatusCode);
+        Assert.Contains("mes de inicio", await late.Content.ReadAsStringAsync());
+
+        var afterEnd = await c.PostAsJsonAsync("/recurring-rules", Rule(1, Month(1), Month(3),
+            new { fromMonth = Month(1), amount = 4_415_000m }, new { fromMonth = Month(4), amount = 4_680_000m }));
+        Assert.Equal(HttpStatusCode.BadRequest, afterEnd.StatusCode);
+        Assert.Contains("posterior al mes hasta", await afterEnd.Content.ReadAsStringAsync());
+    }
 }
