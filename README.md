@@ -4,7 +4,7 @@ App para manejar la caja familiar y la de Memey: caja actual, proyección a fin 
 
 - `backend/`: API en .NET 10 con SQLite (EF Core). Calcula todo.
 - `mobile/`: app React Native con Expo. Muestra y carga datos.
-- `docs/arquitectura.md`: diagrama, reglas de negocio y endpoints.
+- `docs/`: documentación técnica (arquitectura, endpoints, DER de la base, clases, pantallas, tecnologías, desarrollo y CI). Empezá por `docs/README.md`.
 - `data/import/`: foto de octubre de la planilla, lista para importar.
 
 ## Backend
@@ -83,4 +83,9 @@ Si la app dice "No se pudo conectar con la API en ...", abrí `http://<IP de la 
 
 ## Estado
 
-API con dashboard, movimientos, tarjetas, gastos fijos, presupuesto, reporte presupuestado vs real e importación de la planilla. Octubre importado y comparado contra la planilla en los tests.
+- API con dashboard, flujo de caja, movimientos (alta, edición, borrado y confirmación de previstos), tarjetas con cierres mes a mes, gastos fijos, presupuesto, reporte presupuestado vs real con fecha de corte, ahorro e inversión e importación de la planilla.
+- Editar o borrar un movimiento rehace sus impactos en caja, así que saldos, resúmenes de tarjeta, proyecciones y presupuesto vs real se recalculan solos.
+- Tipos de operación, categorías y medios de pago se editan desde Configuración (lo que está en uso se desactiva).
+- App mobile con 13 pantallas; corre en Expo Go y en el navegador.
+- Octubre importado y comparado contra la planilla en los tests (27 tests de backend en CI).
+- Pendiente: login en la API (hoy solo para la red local) y conexión real con Invertir Online. Ver `docs/desarrollo.md`.
