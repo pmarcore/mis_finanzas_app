@@ -191,7 +191,11 @@ function RuleForm({
           ? 'Hay dos cambios en el mismo mes.'
           : firstChange?.isIncrease
             ? 'El primer cambio tiene que ser un monto; los incrementos se aplican sobre él.'
-            : undefined,
+            : isValidMonth(startMonth) && firstChange && firstChange.fromMonth > startMonth
+              ? `El primer monto tiene que regir desde el mes de inicio (${startMonth}); si no, esos meses quedan en $0.`
+              : endMonth && parsedAmounts.some((a) => a.fromMonth > endMonth)
+                ? 'Hay un cambio de monto posterior al mes hasta: nunca se aplicaría.'
+                : undefined,
   };
   const hasErrors = Object.values(errors).some(Boolean);
   const show = (e?: string) => (submitted ? e : undefined);
