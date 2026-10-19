@@ -81,6 +81,26 @@ public record RecurringRuleDto(
 
 public record BudgetDto(string Month, int CategoryId, decimal Amount);
 
+public record BudgetItemDto(int CategoryId, decimal Amount);
+
+/// <summary>Presupuesto de un mes para guardar varios meses juntos (PUT /budgets).</summary>
+public record BudgetMonthDto(string Month, List<BudgetItemDto> Items);
+
+/// <summary>Si el mes tiene presupuesto propio o de qué mes lo hereda.</summary>
+public record BudgetSourceDto(string Month, Scope Scope, bool HasOwnBudget, string? InheritedFrom);
+
+public record BudgetProposalRowDto(int CategoryId, string Category, BudgetType BudgetType, decimal Base, decimal? Fixed, decimal Proposed, ProposalOrigin Origin);
+
+public record BudgetProposalMonthDto(string Month, bool HasOwnBudget, List<BudgetProposalRowDto> Rows, decimal Total)
+{
+    public static BudgetProposalMonthDto From(ProposalMonth m)
+    {
+        var rows = m.Rows.Select(r => new BudgetProposalRowDto(r.Category.Id, r.Category.Name, r.Category.BudgetType,
+            Money.Pesos(r.Base), r.Fixed is { } f ? Money.Pesos(f) : null, Money.Pesos(r.Proposed), r.Origin)).ToList();
+        return new(Months.Format(m.Month), m.HasOwnBudget, rows, rows.Sum(r => r.Proposed));
+    }
+}
+
 public record BudgetVsActualRowDto(
     int CategoryId, string Category, BudgetType BudgetType, decimal Budget, decimal Actual, decimal Available,
     decimal UsePct, decimal Projected, string Alert);
