@@ -73,7 +73,7 @@ La app se valida con `cd mobile && npx tsc --noEmit` (`npm run typecheck`).
 
 - **Autenticación:** la API no tiene login y el CORS está abierto. El cliente ya manda un token bearer si se le
   configura (`setAuthToken`). Antes de publicar la API fuera de la red local hay que agregar autenticación.
-- **Invertir Online:** interfaz `IInvestmentProvider` lista, sin implementación real (ver
+- **Ripio:** sin API para cuentas personales; las tenencias se cargan a mano (ver
   [arquitectura.md](arquitectura.md#inversiones-e-invertir-online)).
 - **Resúmenes reales de tarjeta:** `Statements.ConfirmedAmount` solo se carga por importación; no hay endpoint para
   editarlo desde la app.

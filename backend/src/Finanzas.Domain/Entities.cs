@@ -214,3 +214,67 @@ public class InvestmentValuation
     /// <summary>Quién informó el valor, por ejemplo "invertirOnline".</summary>
     public required string Source { get; set; }
 }
+
+/// <summary>
+/// Foto diaria de una tenencia (una fila por fecha, origen y símbolo). Cada sincronización del día reemplaza las filas de
+/// ese día. Con ellas se arma la evolución de la cartera y se muestra el dashboard cuando el broker no responde.
+/// </summary>
+public class InvestmentSnapshot
+{
+    public int Id { get; set; }
+    public DateOnly Date { get; set; }
+    public required string Source { get; set; }
+    public required string Symbol { get; set; }
+    public string Description { get; set; } = "";
+    public AssetType AssetType { get; set; }
+    public InvestmentCurrency Currency { get; set; }
+    public string? Market { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal LastPrice { get; set; }
+    public decimal? AvgCost { get; set; }
+    public decimal? DailyChangePct { get; set; }
+    public decimal? GainPct { get; set; }
+    /// <summary>En la moneda del activo, como lo informa el broker.</summary>
+    public decimal? GainAmount { get; set; }
+    public bool GainIsComputed { get; set; }
+    /// <summary>Valor en la moneda del activo.</summary>
+    public decimal MarketValue { get; set; }
+    /// <summary>Valor convertido, en centavos de peso y de dólar.</summary>
+    public long MarketValueArs { get; set; }
+    public long MarketValueUsd { get; set; }
+    public decimal? Mep { get; set; }
+    public DateTimeOffset TakenAt { get; set; }
+}
+
+/// <summary>Tenencia cargada a mano (Ripio no tiene API para cuentas personales). La cotización se busca sola.</summary>
+public class ManualHolding
+{
+    public int Id { get; set; }
+    public string Source { get; set; } = "ripio";
+    public required string Symbol { get; set; }
+    public decimal Quantity { get; set; }
+    /// <summary>Costo total en USD. Si está, la app calcula el rendimiento y lo marca como calculado.</summary>
+    public decimal? CostUsd { get; set; }
+    public bool Active { get; set; } = true;
+}
+
+/// <summary>Cartera objetivo: porcentaje deseado por tipo de activo (señal B).</summary>
+public class InvestmentTarget
+{
+    public int Id { get; set; }
+    public AssetType AssetType { get; set; }
+    public decimal TargetPct { get; set; }
+}
+
+/// <summary>Umbrales de las señales y lista de seguimiento. Una sola fila (Id 1).</summary>
+public class InvestmentSettings
+{
+    public int Id { get; set; }
+    public decimal MaxAssetPct { get; set; } = 25;
+    public decimal MaxGroupPct { get; set; } = 60;
+    public decimal TargetDeviationPts { get; set; } = 5;
+    public long IdleCashArs { get; set; } = 100_000_00;
+    public long IdleCashUsd { get; set; } = 100_00;
+    /// <summary>Activos a seguir separados por coma: "GGAL", "nyse:SPY" o "cripto:BTC". Sin mercado se asume bcba.</summary>
+    public string WatchList { get; set; } = "GGAL,nyse:SPY,cripto:BTC";
+}

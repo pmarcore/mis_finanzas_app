@@ -1,6 +1,6 @@
 # Spec: dashboard de inversiones (IOL y Ripio)
 
-Estado: **borrador, esperando aprobación de Pablo**
+Estado: **aprobada** (PR 17, 2026-10-21). Preguntas abiertas resueltas con lo recomendado: Ripio a mano, señales A + B + D, cartera objetivo vacía al empezar.
 Pedido: Pablo, 2026-10-20 (hilo "Dashboard de inversiones IOL y Ripio")
 
 ## Objetivo
@@ -198,3 +198,11 @@ Se actualizan `docs/arquitectura.md` (sección Inversiones), `docs/base-de-datos
 ## Nota: API y no MCP
 
 Un MCP sirve para que Claude lea datos durante una conversación. La pantalla la arma el backend, que tiene que consultar IOL por su cuenta, así que necesita la API. Si más adelante Pablo quiere analizar la cartera en el chat, se puede sumar un MCP aparte sin cambiar este diseño.
+
+## Ajustes al construir (PR de la feature)
+
+- Gráficos hechos con `react-native-svg` directo (anillo, línea y barras) en lugar de `react-native-gifted-charts`: es una
+  dependencia menos y anda igual en el teléfono y en Expo web.
+- El colchón de la señal D es el **piso de caja** que ya existe en Configuración, para no tener dos valores parecidos.
+- La API pública de precios cripto es la de Binance (sin clave, contra USDT).
+- En la cartera objetivo, un tipo de activo que tenés pero no está en el objetivo cuenta como objetivo 0 %.

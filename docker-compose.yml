@@ -2,6 +2,7 @@
 #   docker compose up -d --build
 #   ./scripts/seed-pruebas.sh            # carga la foto de octubre (borra lo que haya)
 # Admin de la base (ver y editar tablas): http://localhost:8090, solo desde esta PC.
+# Inversiones: IOL_USERNAME e IOL_PASSWORD van en el archivo .env de esta carpeta (no se sube al repo, ver README).
 services:
   api:
     build: ./backend
@@ -9,6 +10,9 @@ services:
       - "5080:8080"
     volumes:
       - finanzas-pruebas:/data
+    environment:
+      Iol__Username: ${IOL_USERNAME:-}
+      Iol__Password: ${IOL_PASSWORD:-}
     restart: unless-stopped
 
   db-admin:

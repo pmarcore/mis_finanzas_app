@@ -333,7 +333,9 @@ classDiagram
 | `CashFlowCalculator` | Caja al corte, proyección a una fecha, flujo de caja con saldo acumulado y resúmenes de tarjeta pendientes (el mayor entre modelado, real y pago previsto, menos lo pagado). |
 | `Budgeting` | Qué consume presupuesto, presupuesto vs real con proyección y alertas, gasto estimado de meses futuros no cubierto por gastos fijos y borrador para presupuestar meses futuros (`Propose`). |
 | `Savings` | Saldo de ahorro o inversión: lo que salió de la caja hacia ellos menos lo que volvió. |
-| `IInvestmentProvider` | Punto de conexión con un broker (Invertir Online, pendiente). |
+| `IInvestmentProvider` | Punto de conexión con un broker: `IolInvestmentProvider` (API de IOL, solo lectura) o `SinProveedorDeInversiones` sin credenciales. |
+| `ICryptoPrices` | Precios de cripto en USD (`BinanceCryptoPrices`) para las tenencias manuales de Ripio. |
+| `InvestmentMath`, `InvestmentSignals` | Conversión con el MEP, totales de la cartera y señales de oportunidades y rotación. |
 
 ## Infraestructura y API
 
@@ -446,7 +448,7 @@ classDiagram
 ```
 
 - `Program.cs` registra `FinanzasDbContext` con SQLite (cadena `ConnectionStrings:Finanzas`, por defecto
-  `Data Source=finanzas.db`), CORS abierto, OpenAPI, `SinProveedorDeInversiones` como `IInvestmentProvider` y los enums
+  `Data Source=finanzas.db`), CORS abierto, OpenAPI, `IolInvestmentProvider` si hay credenciales de IOL (si no, `SinProveedorDeInversiones`), `BinanceCryptoPrices`, caché en memoria, `InvestmentService` y los enums
   como strings camelCase en JSON. Al arrancar aplica las migraciones pendientes.
 - Los endpoints son Minimal APIs agrupados en métodos de extensión (`MapX`) sobre `WebApplication`; no hay
   controladores ni capa de servicios: cada handler carga con EF Core, llama al dominio y arma la respuesta.

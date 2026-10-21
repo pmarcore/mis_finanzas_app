@@ -81,11 +81,29 @@ Si querés un Android de verdad en la PC, instalá Android Studio, creá un disp
 
 Si la app dice "No se pudo conectar con la API en ...", abrí `http://<IP de la PC>:5080/health` en el navegador del celular. Si ahí tampoco carga, el problema es la red o el firewall de Windows (la red Wi-Fi tiene que estar como "Privada"); si carga, revisá que la URL del mensaje sea la de `.env`.
 
+### Inversiones (IOL y Ripio)
+
+La pestaña Inversiones lee tu cuenta de Invertir Online por su API oficial, solo para consultar (nunca opera). Para conectarla:
+
+1. En la web de IOL, habilitá el acceso a la API desde tu cuenta si te lo pide (sección de APIs o configuración personal).
+2. En la carpeta raíz del proyecto (al lado de `docker-compose.yml`, no en `mobile/`) creá un archivo `.env` con:
+   ```
+   IOL_USERNAME=tu_usuario
+   IOL_PASSWORD=tu_contraseña
+   ```
+   Ese archivo está en `.gitignore`: no se sube al repo. Si ya lo tenías en `mobile/.env`, movelo a la raíz.
+3. `docker compose up -d --build`.
+
+Ripio no tiene API para cuentas personales: cargá tus cripto en Configuración → Inversiones y la app busca las
+cotizaciones sola. La API de la app no tiene login: cualquiera en tu red Wi-Fi que llegue al puerto 5080 podría ver la
+cartera (no las credenciales).
+
 ## Estado
 
 - API con dashboard, flujo de caja, movimientos (alta, edición, borrado y confirmación de previstos), tarjetas con cierres mes a mes, gastos fijos, presupuesto, reporte presupuestado vs real con fecha de corte, ahorro e inversión e importación de la planilla.
 - Editar o borrar un movimiento rehace sus impactos en caja, así que saldos, resúmenes de tarjeta, proyecciones y presupuesto vs real se recalculan solos.
 - Tipos de operación, categorías y medios de pago se editan desde Configuración (lo que está en uso se desactiva).
-- App mobile con 13 pantallas; corre en Expo Go y en el navegador.
-- Octubre importado y comparado contra la planilla en los tests (27 tests de backend en CI).
-- Pendiente: login en la API (hoy solo para la red local) y conexión real con Invertir Online. Ver `docs/desarrollo.md`.
+- Dashboard de inversiones con IOL (API, solo lectura) y Ripio (carga manual): rendimientos tal cual los informa IOL, gráficos y señales de concentración, cartera objetivo y plata quieta.
+- App mobile con 18 pantallas; corre en Expo Go y en el navegador.
+- Octubre importado y comparado contra la planilla en los tests (59 tests de backend en CI).
+- Pendiente: login en la API (hoy solo para la red local). Ver `docs/desarrollo.md`.

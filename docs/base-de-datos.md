@@ -142,6 +142,46 @@ erDiagram
         INTEGER MarketValue "centavos"
         TEXT Source
     }
+    InvestmentSnapshots {
+        INTEGER Id PK
+        TEXT Date "unico con Source y Symbol"
+        TEXT Source "invertirOnline o ripio"
+        TEXT Symbol
+        INTEGER AssetType
+        INTEGER Currency "0 ARS, 1 USD"
+        TEXT Quantity
+        TEXT LastPrice
+        TEXT AvgCost "nullable"
+        TEXT GainPct "nullable, del broker"
+        TEXT GainAmount "nullable, del broker"
+        INTEGER GainIsComputed
+        TEXT MarketValue "moneda del activo"
+        INTEGER MarketValueArs "centavos"
+        INTEGER MarketValueUsd "centavos"
+        TEXT Mep "nullable"
+    }
+    ManualHoldings {
+        INTEGER Id PK
+        TEXT Source "ripio"
+        TEXT Symbol
+        TEXT Quantity
+        TEXT CostUsd "nullable"
+        INTEGER Active
+    }
+    InvestmentTargets {
+        INTEGER Id PK
+        INTEGER AssetType "unico"
+        TEXT TargetPct
+    }
+    InvestmentSettings {
+        INTEGER Id PK
+        TEXT MaxAssetPct
+        TEXT MaxGroupPct
+        TEXT TargetDeviationPts
+        INTEGER IdleCashArs "centavos"
+        INTEGER IdleCashUsd "centavos"
+        TEXT WatchList
+    }
 
     PaymentMethods ||--o{ CardCycles : "cierres por mes"
     Transactions ||--|{ CashImpacts : "impactos en caja"
@@ -164,8 +204,8 @@ erDiagram
     RecurringRules |o..o{ Transactions : "previstos generados"
 ```
 
-`Settings` tiene una sola fila (Id 1). `InvestmentValuations` no se relaciona con otras tablas: guarda el valor de
-mercado por ámbito y fecha que informe el proveedor de inversiones.
+`Settings` e `InvestmentSettings` tienen una sola fila (Id 1). Las tablas de inversiones no se relacionan con otras:
+`InvestmentValuations` guarda el valor de mercado total por ámbito y fecha, y `InvestmentSnapshots` el detalle por activo.
 
 ## Tablas
 
@@ -238,7 +278,19 @@ apertura: los impactos anteriores a la apertura no cuentan.
 
 `Settings`: piso de caja, meta de ahorro y umbrales de alerta del presupuesto (70/80/100/120 % por defecto).
 `InvestmentValuations`: valor de mercado de las inversiones por ámbito y fecha, con el proveedor que lo informó
-(índice por `Scope, Date`).
+(índice por `Scope, Date`). El dashboard deja una por día para Familia.
+
+### Inversiones (dashboard)
+
+- `InvestmentSnapshots`: foto diaria por activo (IOL y Ripio), con las cifras del broker en la moneda del activo y el valor
+  convertido a $ y US$ con el MEP del momento. Cada actualización del día reemplaza las filas de ese día. El efectivo
+  disponible va como `AssetType` Efectivo (símbolos `ARS` y `USD`).
+- `ManualHoldings`: tenencias de Ripio cargadas a mano (cantidad y costo total en USD opcional).
+- `InvestmentTargets`: cartera objetivo, % por tipo de activo (suma 100).
+- `InvestmentSettings`: umbrales de las señales (25 % por activo, 60 % por tipo o moneda, 5 puntos de desvío, plata quieta
+  desde $100.000 o US$100) y lista de seguimiento (`GGAL,nyse:SPY,cripto:BTC`).
+
+Los precios y porcentajes son `decimal`, que SQLite guarda como texto: se suman en memoria, no en SQL.
 
 ## Enums
 
@@ -246,6 +298,8 @@ apertura: los impactos anteriores a la apertura no cuentan.
 | --- | --- |
 | `Scope` | 1 Familia, 2 Memey |
 | `OperationKind` | 1 Movimiento, 2 PagoTarjeta, 3 Transferencia, 4 Ahorro, 5 Inversion |
+| `AssetType` | 0 Acciones, 1 Cedears, 2 Bonos, 3 Ons, 4 Fci, 5 Cripto, 6 Efectivo, 7 Otros |
+| `InvestmentCurrency` | 0 Ars, 1 Usd |
 | `CashEffect` | 1 Suma, -1 Resta |
 | `TransactionStatus` | 1 Realizado, 2 Previsto |
 | `PaymentMethodType` | 1 Debito, 2 Efectivo, 3 Billetera, 4 Tarjeta |
@@ -277,6 +331,7 @@ En `backend/src/Finanzas.Infrastructure/Migrations/`:
 | `20261008191001_InitialCreate` | Esquema inicial y datos sembrados. |
 | `20261008194003_CategoryUniqueName` | Nombre de categoría único por ámbito. |
 | `20261012014247_TiposDeOperacionAhorroInversion` | Tabla `OperationTypes`: la columna `Operation` (enum) de movimientos y gastos fijos pasa a ser `OperationTypeId` con FK. Agrega `Active` en categorías y medios de pago, y la tabla `InvestmentValuations`. |
+| `20261021141201_DashboardInversiones` | Tablas `InvestmentSnapshots`, `ManualHoldings`, `InvestmentTargets` e `InvestmentSettings` (con su fila sembrada). |
 | `20261019213123_IncrementoPorcentualEnFijos` | Columna `IncreasePercent` (nullable) en `RecurringRuleAmounts` para los incrementos % previstos de los gastos fijos. Las filas existentes quedan como montos fijos. |
 
 Para crear una nueva (desde `backend/`):

@@ -220,22 +220,6 @@ public static class Catalogs
                     valuation is null ? null : Money.Pesos(valuation.MarketValue), valuation?.Date,
                     provider.Name, provider.IsConnected, Movements(OperationKind.Inversion))));
         });
-
-        // Trae el valor de mercado del broker y lo guarda como valuación del día. Sin proveedor conectado responde 503.
-        app.MapPost("/investments/sync", async (string? scope, FinanzasDbContext db, IInvestmentProvider provider, CancellationToken ct) =>
-        {
-            if (!provider.IsConnected) return Results.Problem("Invertir Online todavía no está conectado.", statusCode: StatusCodes.Status503ServiceUnavailable);
-            var sc = Endpoints.ScopeOrFamilia(scope);
-            var portfolio = await provider.GetPortfolioAsync(sc, ct);
-            if (portfolio is null) return Results.NotFound($"{provider.Name} no tiene cuenta para {sc}.");
-            db.InvestmentValuations.Add(new InvestmentValuation { Scope = sc, Date = portfolio.Date, MarketValue = portfolio.MarketValue, Source = provider.Name });
-            await db.SaveChangesAsync();
-            return Results.Ok(new
-            {
-                scope = sc, date = portfolio.Date, marketValue = Money.Pesos(portfolio.MarketValue),
-                positions = portfolio.Positions.Select(p => new { p.Symbol, p.Description, p.Quantity, marketValue = Money.Pesos(p.MarketValue) }),
-            });
-        });
     }
 
     static async Task RebuildImpactsAsync(FinanzasDbContext db, List<Transaction> transactions)
