@@ -177,6 +177,143 @@ namespace Finanzas.Infrastructure.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("Finanzas.Domain.InvestmentSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("IdleCashArs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("IdleCashUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("MaxAssetPct")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("MaxGroupPct")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("TargetDeviationPts")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WatchList")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("InvestmentSettings");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            IdleCashArs = 10000000L,
+                            IdleCashUsd = 10000L,
+                            MaxAssetPct = 25m,
+                            MaxGroupPct = 60m,
+                            TargetDeviationPts = 5m,
+                            WatchList = "GGAL,nyse:SPY,cripto:BTC"
+                        });
+                });
+
+            modelBuilder.Entity("Finanzas.Domain.InvestmentSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AssetType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("AvgCost")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Currency")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("DailyChangePct")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("GainAmount")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("GainIsComputed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("GainPct")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("LastPrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Market")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("MarketValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("MarketValueArs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("MarketValueUsd")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("Mep")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TakenAt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date", "Source", "Symbol")
+                        .IsUnique();
+
+                    b.ToTable("InvestmentSnapshots");
+                });
+
+            modelBuilder.Entity("Finanzas.Domain.InvestmentTarget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AssetType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("TargetPct")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetType")
+                        .IsUnique();
+
+                    b.ToTable("InvestmentTargets");
+                });
+
             modelBuilder.Entity("Finanzas.Domain.InvestmentValuation", b =>
                 {
                     b.Property<int>("Id")
@@ -201,6 +338,34 @@ namespace Finanzas.Infrastructure.Migrations
                     b.HasIndex("Scope", "Date");
 
                     b.ToTable("InvestmentValuations");
+                });
+
+            modelBuilder.Entity("Finanzas.Domain.ManualHolding", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Active")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("CostUsd")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ManualHoldings");
                 });
 
             modelBuilder.Entity("Finanzas.Domain.OperationType", b =>

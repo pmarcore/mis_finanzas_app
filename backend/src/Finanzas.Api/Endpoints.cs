@@ -57,7 +57,7 @@ public static class Endpoints
         db.PaymentMethods.Where(m => m.Type == PaymentMethodType.Tarjeta).ToDictionaryAsync(m => m.Id, m => m.Name);
 
     /// <summary>Calculadora de caja con el gasto estimado del presupuesto familiar, igual para el dashboard y el flujo de caja.</summary>
-    static async Task<(CashFlowCalculator Calc, List<BudgetEstimate> Estimates)> Calculator(
+    internal static async Task<(CashFlowCalculator Calc, List<BudgetEstimate> Estimates)> Calculator(
         FinanzasDbContext db, List<Category> categories, List<Budget> budgets, List<Transaction> transactions, DateOnly cutoff, DateOnly horizon)
     {
         var rules = await db.RecurringRules.Include(r => r.Amounts).ToListAsync();

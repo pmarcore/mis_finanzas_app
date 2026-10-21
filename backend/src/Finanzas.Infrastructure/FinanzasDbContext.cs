@@ -19,6 +19,10 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
     public DbSet<Settings> Settings => Set<Settings>();
     public DbSet<OperationType> OperationTypes => Set<OperationType>();
     public DbSet<InvestmentValuation> InvestmentValuations => Set<InvestmentValuation>();
+    public DbSet<InvestmentSnapshot> InvestmentSnapshots => Set<InvestmentSnapshot>();
+    public DbSet<ManualHolding> ManualHoldings => Set<ManualHolding>();
+    public DbSet<InvestmentTarget> InvestmentTargets => Set<InvestmentTarget>();
+    public DbSet<InvestmentSettings> InvestmentSettings => Set<InvestmentSettings>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -36,6 +40,10 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
         b.Entity<RecurringRule>().HasOne(x => x.OperationType).WithMany().HasForeignKey(x => x.OperationTypeId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<RecurringRule>().Navigation(x => x.OperationType).AutoInclude();
         b.Entity<InvestmentValuation>().HasIndex(x => new { x.Scope, x.Date });
+        b.Entity<InvestmentSnapshot>().HasIndex(x => new { x.Date, x.Source, x.Symbol }).IsUnique();
+        // SQLite no ordena ni compara DateTimeOffset: se guarda como texto ISO, que ordena bien.
+        b.Entity<InvestmentSnapshot>().Property(x => x.TakenAt).HasConversion(v => v.ToString("O"), v => DateTimeOffset.Parse(v));
+        b.Entity<InvestmentTarget>().HasIndex(x => x.AssetType).IsUnique();
 
         b.Entity<Transaction>().HasMany(x => x.Impacts).WithOne().HasForeignKey(i => i.TransactionId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transaction>().HasIndex(x => x.Date);
@@ -69,6 +77,7 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
             new PaymentMethod { Id = 7, Name = "Tarjeta Mercado Pago", Type = PaymentMethodType.Tarjeta, CashBoxId = 1 });
 
         b.Entity<Settings>().HasData(new Settings { Id = 1 });
+        b.Entity<InvestmentSettings>().HasData(new InvestmentSettings { Id = 1 });
 
         // Los 7 tipos de la planilla (mismos ids que la operación que tenían antes) más inversión y rescates.
         b.Entity<OperationType>().HasData(
