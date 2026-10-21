@@ -40,12 +40,13 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 
 ## Tests
 
-`cd backend && dotnet test`
+`cd backend && dotnet test` (27 tests).
 
 | Archivo | Qué prueba |
 | --- | --- |
 | `CashFlowTests.cs` | Reglas del dominio sin base: vencimiento propuesto, cuotas y redondeo, compra con tarjeta que no toca caja hasta el vencimiento, resumen real vs modelado, pago parcial, transferencias, gastos fijos, tipos configurables, ahorro |
 | `PlanillaOctubreTests.cs` | Levanta la API en memoria (`WebApplicationFactory`) con una base SQLite temporal, importa `data/import/planilla-2026-10.json` y compara caja, pagos de tarjeta, presupuesto vs real, proyección y flujo de caja contra los valores de la planilla al 08/10/2026 |
+| `EdicionMovimientosTests.cs` | Editar y borrar movimientos: un gasto que cambia caja y presupuesto vs real, un ingreso que cambia monto y fecha, una compra que pasa a tarjeta y sale de la caja hacia el resumen, editar o borrar un pago de tarjeta, y ediciones inválidas que dejan el movimiento como estaba |
 | `ConfiguracionTests.cs` | Tipos de operación por ámbito, cambio de efecto que recalcula movimientos, ahorro e inversión aparte de la caja, alta y desactivación de categorías y medios de pago |
 | `VigenciaEIncrementosTests.cs` | Gastos fijos con vigencia desde-hasta e incrementos % acumulados: montos por mes, previstos generados por la API y validaciones (primer cambio es un monto y rige desde el inicio, ningún cambio después del hasta, hasta no anterior a desde) |
 | `PresupuestoMesesFuturosTests.cs` | Proyectar presupuesto: fuente presupuesto (con herencia) o real de un mes cerrado, ajuste % único y redondeo a $1.000, fijos con incrementos y vigencia (Fijo/Deuda vs. Variable), guardado de varios meses sin tocar la otra entidad, aviso de herencia y validaciones |
