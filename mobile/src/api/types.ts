@@ -163,9 +163,14 @@ export interface ConfirmTransaction {
   amount?: number;
 }
 
+/**
+ * Cambio desde un mes: un monto fijo, o un incremento % (increasePercent) sobre el monto vigente.
+ * En los incrementos el backend devuelve en amount el monto resultante; al guardar lo ignora.
+ */
 export interface RecurringAmount {
   fromMonth: Month;
   amount: number;
+  increasePercent?: number | null;
 }
 
 export interface RecurringRule {
@@ -195,6 +200,58 @@ export interface Budget {
   month: Month;
   categoryId: Id;
   amount: number;
+}
+
+/** Si el mes tiene presupuesto propio o de qué mes lo hereda (GET /budgets/{month}/source). */
+export interface BudgetSource {
+  month: Month;
+  scope: Scope;
+  hasOwnBudget: boolean;
+  inheritedFrom: Month | null;
+}
+
+/** Fuente base para proyectar meses futuros: el presupuesto de un mes o el real de un mes cerrado. */
+export type ProposalSource = 'budget' | 'actual';
+
+export type ProposalOrigin = 'base' | 'fijos' | 'mayor';
+
+export const PROPOSAL_ORIGIN_LABELS: Record<ProposalOrigin, string> = {
+  base: 'Base',
+  fijos: 'Fijos',
+  mayor: 'Mayor base/fijos',
+};
+
+export interface BudgetProposalRow {
+  categoryId: Id;
+  category: string;
+  budgetType: BudgetType;
+  base: number;
+  fixed: number | null;
+  proposed: number;
+  origin: ProposalOrigin;
+}
+
+export interface BudgetProposalMonth {
+  month: Month;
+  hasOwnBudget: boolean;
+  rows: BudgetProposalRow[];
+  total: number;
+}
+
+export interface BudgetProposalQuery {
+  scope: Scope;
+  source: ProposalSource;
+  sourceMonth: Month;
+  from: Month;
+  to: Month;
+  useFixed: boolean;
+  increasePct?: number;
+}
+
+/** Un mes del guardado múltiple (PUT /budgets). */
+export interface BudgetMonth {
+  month: Month;
+  items: { categoryId: Id; amount: number }[];
 }
 
 export interface CardPaymentByCard {

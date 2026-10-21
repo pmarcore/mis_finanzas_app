@@ -1,6 +1,7 @@
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { Scope } from '../api/types';
 
 /**
  * Movimientos: `vista: 'caja'` abre el flujo de caja con saldo acumulado y marca la línea pedida
@@ -18,7 +19,11 @@ export type TabParamList = {
 
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList>;
-  Reporte: { month?: string } | undefined;
+  Reporte: { month?: string; scope?: Scope } | undefined;
+  /** Movimientos que forman el real de una categoría del presupuesto vs. real en un mes al corte. */
+  MovimientosCategoria: { categoryId: number; category: string; month: string; cutoff: string; scope: Scope };
+  /** Borrador del presupuesto de meses futuros a partir de un mes de la entidad. */
+  ProyectarPresupuesto: { scope: Scope; month: string };
   Tarjetas: undefined;
   Configuracion: undefined;
   TiposOperacion: undefined;

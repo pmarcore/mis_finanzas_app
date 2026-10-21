@@ -59,9 +59,17 @@ public static class CashImpactBuilder
 
 public static class RecurringRuleExpander
 {
-    /// <summary>Monto vigente en un mes: el último cambio con FromMonth menor o igual.</summary>
-    public static long AmountFor(RecurringRule rule, DateOnly month) =>
-        rule.Amounts.Where(a => a.FromMonth <= month).OrderByDescending(a => a.FromMonth).Select(a => a.Amount).FirstOrDefault();
+    /// <summary>
+    /// Monto vigente en un mes: se recorren los cambios hasta ese mes; un monto fijo reemplaza al anterior
+    /// y un incremento % se aplica sobre el vigente, así varios incrementos se acumulan.
+    /// </summary>
+    public static long AmountFor(RecurringRule rule, DateOnly month)
+    {
+        long amount = 0;
+        foreach (var a in rule.Amounts.Where(a => a.FromMonth <= month).OrderBy(a => a.FromMonth))
+            amount = a.IncreasePercent is { } pct ? (long)Math.Round(amount * (1 + pct / 100m), MidpointRounding.AwayFromZero) : a.Amount;
+        return amount;
+    }
 
     /// <summary>Previstos de la regla desde su inicio hasta untilMonth (por defecto, diciembre del año en curso).</summary>
     public static IEnumerable<Transaction> Expand(RecurringRule rule, PaymentMethod method, DateOnly untilMonth, DateOnly? fromMonth = null)

@@ -1,41 +1,50 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useBudgets, useCategories, useUpdateBudgets } from '../api/endpoints';
-import type { Budget, Id, Month } from '../api/types';
+import { useBudgetSource, useBudgets, useCategories, useUpdateBudgets } from '../api/endpoints';
+import type { Budget, Id, Month, Scope } from '../api/types';
 import { Card } from '../components/Card';
 import { Input } from '../components/Field';
+import { MoneyText } from '../components/MoneyText';
 import { MonthStepper } from '../components/MonthStepper';
 import { QueryState } from '../components/QueryState';
 import { Screen } from '../components/Screen';
+import { Segmented } from '../components/Segmented';
 import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
 import { radius, spacing, useTheme } from '../theme';
-import { amountToInput, monthOf, parseAmount } from '../utils/format';
+import { amountToInput, formatMonth, monthOf, parseAmount } from '../utils/format';
 
 export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>) {
-  const { cutoff } = useScope();
+  const { cutoff, scope: currentScope } = useScope();
   const { colors } = useTheme();
   const [month, setMonth] = useState<Month>(() => monthOf(cutoff));
-  const q = useBudgets(month);
+  // Cada entidad tiene su propio presupuesto: se carga y se guarda el de Familia o el de Memey, sin mezclar.
+  const [scope, setScope] = useState<Scope>(currentScope);
+  const q = useBudgets(month, scope);
   const categories = useCategories();
-  const save = useUpdateBudgets(month);
+  const save = useUpdateBudgets(month, scope);
+  const accent = scope === 'memey' ? colors.memey : colors.familia;
+  // Un mes sin presupuesto propio usa el último mes anterior cargado: se avisa y se precarga con esos montos.
+  const source = useBudgetSource(month, scope);
+  const inheritedFrom = source.data && !source.data.hasOwnBudget ? source.data.inheritedFrom : null;
+  const inherited = useBudgets(inheritedFrom ?? month, scope);
+  const shown = inheritedFrom ? inherited.data : q.data;
 
   // Borrador editable: categoryId → texto del monto.
   const [draft, setDraft] = useState<Record<Id, string>>({});
   useEffect(() => {
-    setDraft(Object.fromEntries((q.data ?? []).map((b) => [b.categoryId, amountToInput(b.amount)])));
-  }, [q.data]);
+    setDraft(Object.fromEntries((shown ?? []).map((b) => [b.categoryId, amountToInput(b.amount)])));
+  }, [shown]);
 
-  // Las categorías de gasto activas (para poder presupuestar un mes vacío) más las que ya tengan monto.
+  // Las categorías de gasto activas de la entidad (para poder presupuestar un mes vacío) más las que ya tengan monto.
   const rows = useMemo(() => {
     const all = categories.data ?? [];
-    const ids = new Set(all.filter((c) => c.kind === 'gasto' && c.active).map((c) => c.id));
-    (q.data ?? []).forEach((b) => ids.add(b.categoryId));
-    return [...ids].map((id) => {
-      const c = all.find((x) => x.id === id);
-      return { id, name: c ? (c.scope === 'memey' ? `${c.name} (Memey)` : c.name) : `#${id}`, scope: c?.scope };
-    });
-  }, [categories.data, q.data]);
+    const ids = new Set(all.filter((c) => c.scope === scope && c.kind === 'gasto' && c.active).map((c) => c.id));
+    (shown ?? []).forEach((b) => ids.add(b.categoryId));
+    return [...ids].map((id) => ({ id, name: all.find((x) => x.id === id)?.name ?? `#${id}` }));
+  }, [categories.data, shown, scope]);
+
+  const total = Object.values(draft).reduce((sum, text) => sum + (parseAmount(text) ?? 0), 0);
 
   const onSave = () => {
     const budgets: Budget[] = Object.entries(draft)
@@ -46,18 +55,35 @@ export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>)
 
   return (
     <Screen refreshing={q.isRefetching} onRefresh={q.refetch}>
+      <Segmented<Scope>
+        value={scope}
+        onChange={(s) => {
+          setScope(s);
+          save.reset();
+        }}
+        options={[
+          { value: 'familia', label: 'Familia', color: colors.familia },
+          { value: 'memey', label: 'Memey', color: colors.memey },
+        ]}
+      />
       <MonthStepper value={month} onChange={setMonth} />
       <QueryState
         isLoading={q.isLoading || categories.isLoading}
         error={q.error ?? categories.error}
         onRetry={q.refetch}
         isEmpty={rows.length === 0}
-        emptyText="No hay categorías de gasto."
+        emptyText={`No hay categorías de gasto de ${scope === 'memey' ? 'Memey' : 'Familia'}.`}
       >
-        <Card>
+        {inheritedFrom && (
+          <Text style={{ color: colors.inkMuted }}>
+            Este mes no tiene presupuesto propio: se usa el de {formatMonth(inheritedFrom)}. Al guardar pasa a ser el de este
+            mes.
+          </Text>
+        )}
+        <Card accent={accent}>
           {rows.map((r) => (
             <View key={r.id} style={styles.line}>
-              <Text style={{ color: r.scope === 'memey' ? colors.memey : colors.ink, flex: 1 }}>{r.name}</Text>
+              <Text style={{ color: colors.ink, flex: 1 }}>{r.name}</Text>
               <Input
                 value={draft[r.id] ?? ''}
                 onChangeText={(t) => setDraft((d) => ({ ...d, [r.id]: t }))}
@@ -67,19 +93,28 @@ export function PresupuestoScreen({ navigation }: TabScreenProps<'Presupuesto'>)
               />
             </View>
           ))}
+          <View style={[styles.line, styles.total, { borderTopColor: colors.border }]}>
+            <Text style={{ color: colors.ink, fontWeight: '700', flex: 1 }}>Total</Text>
+            <MoneyText value={total} size="sm" />
+          </View>
         </Card>
         <Pressable
           onPress={onSave}
           disabled={save.isPending}
-          style={[styles.button, { backgroundColor: colors.familia, opacity: save.isPending ? 0.6 : 1 }]}
+          style={[styles.button, { backgroundColor: accent, opacity: save.isPending ? 0.6 : 1 }]}
         >
-          <Text style={{ color: colors.surface, fontWeight: '700' }}>Guardar presupuesto</Text>
+          <Text style={{ color: colors.surface, fontWeight: '700' }}>
+            Guardar presupuesto {scope === 'memey' ? 'Memey' : 'Familia'}
+          </Text>
         </Pressable>
         {save.error && <Text style={{ color: colors.bad }}>{save.error.message}</Text>}
         {save.isSuccess && <Text style={{ color: colors.good }}>Presupuesto guardado.</Text>}
       </QueryState>
-      <Pressable onPress={() => navigation.navigate('Reporte', { month })} style={styles.link}>
-        <Text style={{ color: colors.familia, fontWeight: '600' }}>Ver presupuesto vs. real →</Text>
+      <Pressable onPress={() => navigation.navigate('Reporte', { month, scope })} style={styles.link}>
+        <Text style={{ color: accent, fontWeight: '600' }}>Ver presupuesto vs. real →</Text>
+      </Pressable>
+      <Pressable onPress={() => navigation.navigate('ProyectarPresupuesto', { scope, month })} style={styles.link}>
+        <Text style={{ color: accent, fontWeight: '600' }}>Proyectar meses futuros →</Text>
       </Pressable>
     </Screen>
   );
@@ -90,4 +125,5 @@ const styles = StyleSheet.create({
   amount: { width: 130, textAlign: 'right' },
   button: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   link: { alignItems: 'center', padding: spacing.md },
+  total: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing.sm },
 });

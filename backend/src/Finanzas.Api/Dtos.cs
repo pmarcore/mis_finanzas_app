@@ -51,7 +51,8 @@ public record CardCycleDto(int CardId, string Month, DateOnly ClosingDate, DateO
 
 public record CardDueDateDto(int CardId, DateOnly PurchaseDate, DateOnly FirstDueDate);
 
-public record RecurringAmountDto(string FromMonth, decimal Amount);
+/// <summary>Con IncreasePercent el cambio es un incremento sobre el monto vigente; Amount vuelve calculado y se ignora al guardar.</summary>
+public record RecurringAmountDto(string FromMonth, decimal Amount, decimal? IncreasePercent = null);
 
 public record RecurringRuleDto(
     int Id, Scope Scope, int PersonId, int OperationTypeId, string Description, int CategoryId, int PaymentMethodId,
@@ -60,18 +61,45 @@ public record RecurringRuleDto(
     public static RecurringRuleDto From(RecurringRule r) => new(
         r.Id, r.Scope, r.PersonId, r.OperationTypeId, r.Description, r.CategoryId, r.PaymentMethodId, r.DayOfMonth,
         Months.Format(r.StartMonth), r.EndMonth is { } e ? Months.Format(e) : null,
-        r.Amounts.OrderBy(a => a.FromMonth).Select(a => new RecurringAmountDto(Months.Format(a.FromMonth), Money.Pesos(a.Amount))).ToList());
+        r.Amounts.OrderBy(a => a.FromMonth)
+            .Select(a => new RecurringAmountDto(Months.Format(a.FromMonth), Money.Pesos(RecurringRuleExpander.AmountFor(r, a.FromMonth)), a.IncreasePercent))
+            .ToList());
 
     public void ApplyTo(RecurringRule r)
     {
         r.Scope = Scope; r.PersonId = PersonId; r.OperationTypeId = OperationTypeId; r.Description = Description; r.CategoryId = CategoryId;
         r.PaymentMethodId = PaymentMethodId; r.DayOfMonth = Math.Clamp(DayOfMonth, 1, 31);
         r.StartMonth = Months.Parse(StartMonth); r.EndMonth = EndMonth is null ? null : Months.Parse(EndMonth);
-        r.Amounts = Amounts.Select(a => new RecurringRuleAmount { FromMonth = Months.Parse(a.FromMonth), Amount = Money.Cents(a.Amount) }).ToList();
+        r.Amounts = Amounts.Select(a => new RecurringRuleAmount
+        {
+            FromMonth = Months.Parse(a.FromMonth),
+            Amount = a.IncreasePercent is null ? Money.Cents(a.Amount) : 0,
+            IncreasePercent = a.IncreasePercent,
+        }).ToList();
     }
 }
 
 public record BudgetDto(string Month, int CategoryId, decimal Amount);
+
+public record BudgetItemDto(int CategoryId, decimal Amount);
+
+/// <summary>Presupuesto de un mes para guardar varios meses juntos (PUT /budgets).</summary>
+public record BudgetMonthDto(string Month, List<BudgetItemDto> Items);
+
+/// <summary>Si el mes tiene presupuesto propio o de qué mes lo hereda.</summary>
+public record BudgetSourceDto(string Month, Scope Scope, bool HasOwnBudget, string? InheritedFrom);
+
+public record BudgetProposalRowDto(int CategoryId, string Category, BudgetType BudgetType, decimal Base, decimal? Fixed, decimal Proposed, ProposalOrigin Origin);
+
+public record BudgetProposalMonthDto(string Month, bool HasOwnBudget, List<BudgetProposalRowDto> Rows, decimal Total)
+{
+    public static BudgetProposalMonthDto From(ProposalMonth m)
+    {
+        var rows = m.Rows.Select(r => new BudgetProposalRowDto(r.Category.Id, r.Category.Name, r.Category.BudgetType,
+            Money.Pesos(r.Base), r.Fixed is { } f ? Money.Pesos(f) : null, Money.Pesos(r.Proposed), r.Origin)).ToList();
+        return new(Months.Format(m.Month), m.HasOwnBudget, rows, rows.Sum(r => r.Proposed));
+    }
+}
 
 public record BudgetVsActualRowDto(
     int CategoryId, string Category, BudgetType BudgetType, decimal Budget, decimal Actual, decimal Available,

@@ -3,6 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
 import type {
   Budget,
+  BudgetMonth,
+  BudgetProposalMonth,
+  BudgetProposalQuery,
+  BudgetSource,
   BudgetVsActual,
   CardCycle,
   CardDueDate,
@@ -36,9 +40,13 @@ export const queryKeys = {
   cardDueDate: (cardId: Id, purchaseDate: ISODate) => ['cards', cardId, 'due-date', purchaseDate] as const,
   cardCycles: (cardId: Id) => ['cards', cardId, 'cycles'] as const,
   recurringRules: (scope?: Scope) => ['recurring-rules', scope ?? 'todos'] as const,
-  budgets: (month: Month) => ['budgets', month] as const,
+  budgets: (month: Month, scope: Scope) => ['budgets', month, scope] as const,
+  budgetSource: (month: Month, scope: Scope) => ['budgets', 'source', month, scope] as const,
+  budgetProposal: (q: BudgetProposalQuery) => ['budgets', 'proposal', q] as const,
   budgetVsActual: (month: Month, cutoff: ISODate, scope: Scope) =>
     ['reports', 'budget-vs-actual', month, cutoff, scope] as const,
+  budgetCategoryTransactions: (categoryId: Id, month: Month, cutoff: ISODate) =>
+    ['reports', 'budget-vs-actual', 'transactions', categoryId, month, cutoff] as const,
   settings: ['settings'] as const,
   people: ['people'] as const,
   categories: (scope?: Scope) => ['categories', scope ?? 'todos'] as const,
@@ -71,6 +79,8 @@ export interface TransactionFilters {
   /** Inclusivo. */
   to?: ISODate;
   status?: TransactionStatus;
+  categoryId?: Id;
+  paymentMethodId?: Id;
 }
 
 export function useTransactions(filters: TransactionFilters = {}) {
@@ -214,24 +224,56 @@ export function useDeleteRecurringRule() {
 }
 
 // ---------- Presupuesto ----------
-export function useBudgets(month: Month) {
+/** El presupuesto es por ámbito: Familia y Memey se leen y se guardan por separado. */
+export function useBudgets(month: Month, scope: Scope) {
   return useQuery({
-    queryKey: queryKeys.budgets(month),
-    queryFn: ({ signal }) => api.get<Budget[]>(`/budgets/${month}`, undefined, signal),
+    queryKey: queryKeys.budgets(month, scope),
+    queryFn: ({ signal }) => api.get<Budget[]>(`/budgets/${month}`, { scope }, signal),
   });
 }
 
-export function useUpdateBudgets(month: Month) {
+/** Lo que cambia al guardar presupuesto: el reporte, el dashboard y el flujo de caja (proyección de meses futuros). */
+function invalidateBudgets(qc: ReturnType<typeof useQueryClient>) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ['budgets'] }),
+    qc.invalidateQueries({ queryKey: ['reports'] }),
+    qc.invalidateQueries({ queryKey: ['dashboard'] }),
+    qc.invalidateQueries({ queryKey: ['cashflow'] }),
+  ]);
+}
+
+/** Reemplaza solo el presupuesto del ámbito; el del otro no se toca. */
+export function useUpdateBudgets(month: Month, scope: Scope) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (budgets: Budget[]) => api.put<Budget[]>(`/budgets/${month}`, budgets),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: queryKeys.budgets(month) }),
-        qc.invalidateQueries({ queryKey: ['reports'] }),
-        qc.invalidateQueries({ queryKey: ['dashboard'] }),
-        qc.invalidateQueries({ queryKey: ['cashflow'] }),
-      ]),
+    mutationFn: (budgets: Budget[]) => api.put<Budget[]>(`/budgets/${month}?scope=${scope}`, budgets),
+    onSuccess: () => invalidateBudgets(qc),
+  });
+}
+
+/** Si el mes tiene presupuesto propio o hereda el de un mes anterior. */
+export function useBudgetSource(month: Month, scope: Scope) {
+  return useQuery({
+    queryKey: queryKeys.budgetSource(month, scope),
+    queryFn: ({ signal }) => api.get<BudgetSource>(`/budgets/${month}/source`, { scope }, signal),
+  });
+}
+
+/** Borrador del presupuesto de meses futuros; no guarda nada. Se pide al tocar "Ver borrador" (q en null = sin pedir). */
+export function useBudgetProposal(q: BudgetProposalQuery | null) {
+  return useQuery({
+    queryKey: queryKeys.budgetProposal(q!),
+    queryFn: ({ signal }) => api.get<BudgetProposalMonth[]>('/budgets/proposal', { ...q! }, signal),
+    enabled: q !== null,
+  });
+}
+
+/** Guarda varios meses juntos; cada mes reemplaza el presupuesto del ámbito. */
+export function useSaveBudgetMonths(scope: Scope) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (months: BudgetMonth[]) => api.put<Budget[]>(`/budgets?scope=${scope}`, months),
+    onSuccess: () => invalidateBudgets(qc),
   });
 }
 
@@ -241,6 +283,15 @@ export function useBudgetVsActual(month: Month, cutoff: ISODate, scope: Scope) {
     queryKey: queryKeys.budgetVsActual(month, cutoff, scope),
     queryFn: ({ signal }) =>
       api.get<BudgetVsActual>('/reports/budget-vs-actual', { month, cutoff, scope }, signal),
+  });
+}
+
+/** Movimientos que forman el real de una categoría en el mes al corte (detalle de una fila del reporte). */
+export function useBudgetCategoryTransactions(categoryId: Id, month: Month, cutoff: ISODate) {
+  return useQuery({
+    queryKey: queryKeys.budgetCategoryTransactions(categoryId, month, cutoff),
+    queryFn: ({ signal }) =>
+      api.get<Transaction[]>(`/reports/budget-vs-actual/${categoryId}/transactions`, { month, cutoff }, signal),
   });
 }
 

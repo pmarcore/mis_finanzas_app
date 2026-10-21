@@ -176,11 +176,12 @@ public static class Endpoints
     {
         var tx = app.MapGroup("/transactions");
 
-        tx.MapGet("/", async (string? scope, DateOnly? from, DateOnly? to, TransactionStatus? status, FinanzasDbContext db) =>
+        tx.MapGet("/", async (string? scope, DateOnly? from, DateOnly? to, TransactionStatus? status, int? categoryId, int? paymentMethodId, FinanzasDbContext db) =>
         {
             var sc = ParseScope(scope);
             var list = await db.Transactions
                 .Where(t => (sc == null || t.Scope == sc) && (from == null || t.Date >= from) && (to == null || t.Date <= to) && (status == null || t.Status == status))
+                .Where(t => (categoryId == null || t.CategoryId == categoryId) && (paymentMethodId == null || t.PaymentMethodId == paymentMethodId))
                 .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).ToListAsync();
             return list.Select(TransactionDto.From);
         });
@@ -280,12 +281,39 @@ public static class Endpoints
 
     static async Task<string?> RuleError(FinanzasDbContext db, RecurringRuleDto body)
     {
+        if (AmountsError(body) is { } amountsError) return amountsError;
         var type = await db.OperationTypes.FindAsync(body.OperationTypeId);
         if (type is null) return "Elegí un tipo de operación válido.";
         if (type.Kind == OperationKind.PagoTarjeta) return "Los pagos de tarjeta salen de los resúmenes, no se cargan como fijos.";
         var method = await db.PaymentMethods.FindAsync(body.PaymentMethodId);
         if (method is null) return "Elegí un medio de pago válido.";
         if (method.IsCard && type.Kind != OperationKind.Movimiento) return $"{type.Name} sale de una caja, no de una tarjeta.";
+        return null;
+    }
+
+    /// <summary>Vigencia y cambios de monto: el primero tiene que ser un monto, los incrementos % se aplican sobre él.</summary>
+    static string? AmountsError(RecurringRuleDto body)
+    {
+        if (!Months.TryParse(body.StartMonth, out var start)) return "El mes desde es inválido (AAAA-MM).";
+        if (body.EndMonth is not null && (!Months.TryParse(body.EndMonth, out var end) || end < start))
+            return "El mes hasta tiene que ser igual o posterior al mes desde.";
+        if (body.Amounts.Count == 0) return "El gasto fijo necesita al menos un monto.";
+        var months = new HashSet<DateOnly>();
+        foreach (var a in body.Amounts)
+        {
+            if (!Months.TryParse(a.FromMonth, out var m)) return "Cada cambio de monto necesita un mes válido (AAAA-MM).";
+            if (!months.Add(m)) return "Hay dos cambios de monto en el mismo mes.";
+            if (a.IncreasePercent is { } pct ? pct <= -100 : a.Amount <= 0)
+                return a.IncreasePercent is null ? "Cada monto tiene que ser mayor a cero." : "El incremento tiene que ser mayor a -100%.";
+        }
+        var first = body.Amounts.MinBy(a => Months.Parse(a.FromMonth))!;
+        if (first.IncreasePercent is not null)
+            return "El primer cambio tiene que ser un monto; los incrementos % se aplican sobre él.";
+        // Sin monto vigente, los meses entre el inicio y el primer cambio se proyectarían en $0.
+        if (Months.Parse(first.FromMonth) > start)
+            return $"El primer monto tiene que regir desde el mes de inicio ({body.StartMonth}); si no, esos meses quedan en $0.";
+        if (body.EndMonth is not null && months.Max() > Months.Parse(body.EndMonth))
+            return "Hay un cambio de monto posterior al mes hasta: nunca se aplicaría.";
         return null;
     }
 
@@ -302,7 +330,6 @@ public static class Endpoints
 
         rules.MapPost("/", async (RecurringRuleDto body, FinanzasDbContext db) =>
         {
-            if (body.Amounts.Count == 0) return Results.BadRequest("El gasto fijo necesita al menos un monto.");
             if (await RuleError(db, body) is { } error) return Results.BadRequest(error);
             var rule = new RecurringRule { Description = body.Description };
             body.ApplyTo(rule);
@@ -317,7 +344,6 @@ public static class Endpoints
         {
             var rule = await db.RecurringRules.Include(r => r.Amounts).FirstOrDefaultAsync(r => r.Id == id);
             if (rule is null) return Results.NotFound();
-            if (body.Amounts.Count == 0) return Results.BadRequest("El gasto fijo necesita al menos un monto.");
             if (await RuleError(db, body) is { } error) return Results.BadRequest(error);
             db.RecurringRuleAmounts.RemoveRange(rule.Amounts);
             body.ApplyTo(rule);
@@ -341,21 +367,85 @@ public static class Endpoints
 
     public static void MapBudgets(this WebApplication app)
     {
-        app.MapGet("/budgets/{month}", async (string month, FinanzasDbContext db) =>
+        // El presupuesto es por ámbito: se lee y se guarda el de Familia o el de Memey, nunca mezclados.
+        app.MapGet("/budgets/{month}", async (string month, string? scope, FinanzasDbContext db) =>
         {
             if (!Months.TryParse(month, out var first)) return Results.BadRequest("Mes con formato yyyy-MM.");
-            var list = await db.Budgets.Where(b => b.Month == first).ToListAsync();
+            var ids = await ScopeCategoryIds(db, ScopeOrFamilia(scope));
+            var list = await db.Budgets.Where(b => b.Month == first && ids.Contains(b.CategoryId)).ToListAsync();
             return Results.Ok(list.Select(b => new BudgetDto(month, b.CategoryId, Money.Pesos(b.Amount))));
         });
 
-        app.MapPut("/budgets/{month}", async (string month, List<BudgetDto> body, FinanzasDbContext db) =>
+        // Reemplaza solo el presupuesto del ámbito indicado; el del otro queda como estaba.
+        app.MapPut("/budgets/{month}", async (string month, string? scope, List<BudgetDto> body, FinanzasDbContext db) =>
         {
             if (!Months.TryParse(month, out var first)) return Results.BadRequest("Mes con formato yyyy-MM.");
-            db.Budgets.RemoveRange(db.Budgets.Where(b => b.Month == first));
+            var sc = ScopeOrFamilia(scope);
+            var ids = await ScopeCategoryIds(db, sc);
+            if (body.Any(b => !ids.Contains(b.CategoryId)))
+                return Results.BadRequest($"Hay categorías que no son de {sc}: el presupuesto de Familia y el de Memey se cargan por separado.");
+            db.Budgets.RemoveRange(db.Budgets.Where(b => b.Month == first && ids.Contains(b.CategoryId)));
             db.Budgets.AddRange(body.Where(b => b.Amount > 0).Select(b => new Budget { Month = first, CategoryId = b.CategoryId, Amount = Money.Cents(b.Amount) }));
             await db.SaveChangesAsync();
-            var list = await db.Budgets.Where(b => b.Month == first).ToListAsync();
+            var list = await db.Budgets.Where(b => b.Month == first && ids.Contains(b.CategoryId)).ToListAsync();
             return Results.Ok(list.Select(b => new BudgetDto(month, b.CategoryId, Money.Pesos(b.Amount))));
+        });
+
+        // Si el mes tiene presupuesto propio o hereda el del último mes anterior cargado (lo que usan el reporte y la proyección).
+        app.MapGet("/budgets/{month}/source", async (string month, string? scope, FinanzasDbContext db) =>
+        {
+            if (!Months.TryParse(month, out var first)) return Results.BadRequest("Mes con formato yyyy-MM.");
+            var sc = ScopeOrFamilia(scope);
+            var ids = await ScopeCategoryIds(db, sc);
+            var budgets = await db.Budgets.Where(b => ids.Contains(b.CategoryId)).ToListAsync();
+            var (own, from) = Budgeting.SourceOf(budgets, first);
+            return Results.Ok(new BudgetSourceDto(month, sc, own, from is { } f ? Months.Format(f) : null));
+        });
+
+        // Borrador del presupuesto de meses futuros: no guarda nada.
+        app.MapGet("/budgets/proposal", async (string? scope, string? source, string? sourceMonth, string? from, string? to,
+            bool? useFixed, decimal? increasePct, FinanzasDbContext db) =>
+        {
+            var src = source?.ToLowerInvariant() switch { "budget" => BudgetSource.Presupuesto, "actual" => BudgetSource.Real, _ => (BudgetSource?)null };
+            if (src is null) return Results.BadRequest("La fuente es 'budget' (presupuesto de un mes) o 'actual' (real de un mes cerrado).");
+            if (!Months.TryParse(sourceMonth, out var srcMonth) || !Months.TryParse(from, out var first) || !Months.TryParse(to, out var last))
+                return Results.BadRequest("Mes fuente, desde y hasta con formato yyyy-MM.");
+            var today = Today();
+            var current = new DateOnly(today.Year, today.Month, 1);
+            if (src == BudgetSource.Real && Months.EndOf(srcMonth) >= today) return Results.BadRequest("El real solo se toma de un mes cerrado.");
+            if (first < current) return Results.BadRequest("Solo se proyectan meses desde el actual en adelante.");
+            if (last < first) return Results.BadRequest("El mes hasta no puede ser anterior al mes desde.");
+            if (first.AddMonths(12) <= last) return Results.BadRequest("Se proyectan hasta 12 meses por vez.");
+
+            var months = Budgeting.Propose(
+                await db.Categories.ToListAsync(), await db.Budgets.ToListAsync(), await db.Transactions.ToListAsync(),
+                await db.RecurringRules.Include(r => r.Amounts).ToListAsync(),
+                ScopeOrFamilia(scope), src.Value, srcMonth, first, last, useFixed ?? true, increasePct);
+            return Results.Ok(months.Select(BudgetProposalMonthDto.From));
+        });
+
+        // Guarda varios meses juntos (el borrador de la proyección): cada mes reemplaza el presupuesto del ámbito, como PUT /budgets/{month}.
+        app.MapPut("/budgets", async (string? scope, List<BudgetMonthDto> body, FinanzasDbContext db) =>
+        {
+            var sc = ScopeOrFamilia(scope);
+            var ids = await ScopeCategoryIds(db, sc);
+            var parsed = new List<(DateOnly Month, List<BudgetItemDto> Items)>();
+            foreach (var m in body)
+            {
+                if (!Months.TryParse(m.Month, out var first)) return Results.BadRequest("Mes con formato yyyy-MM.");
+                parsed.Add((first, m.Items));
+            }
+            if (parsed.Select(p => p.Month).Distinct().Count() != parsed.Count) return Results.BadRequest("Hay meses repetidos.");
+            if (parsed.SelectMany(p => p.Items).Any(i => !ids.Contains(i.CategoryId)))
+                return Results.BadRequest($"Hay categorías que no son de {sc}: el presupuesto de Familia y el de Memey se cargan por separado.");
+
+            var months = parsed.Select(p => p.Month).ToList();
+            db.Budgets.RemoveRange(db.Budgets.Where(b => months.Contains(b.Month) && ids.Contains(b.CategoryId)));
+            db.Budgets.AddRange(parsed.SelectMany(p => p.Items.Where(i => i.Amount > 0)
+                .Select(i => new Budget { Month = p.Month, CategoryId = i.CategoryId, Amount = Money.Cents(i.Amount) })));
+            await db.SaveChangesAsync();
+            var saved = await db.Budgets.Where(b => months.Contains(b.Month) && ids.Contains(b.CategoryId)).ToListAsync();
+            return Results.Ok(saved.OrderBy(b => b.Month).Select(b => new BudgetDto(Months.Format(b.Month), b.CategoryId, Money.Pesos(b.Amount))));
         });
 
         app.MapGet("/reports/budget-vs-actual", async (string? month, DateOnly? cutoff, string? scope, FinanzasDbContext db) =>
@@ -375,7 +465,25 @@ public static class Endpoints
             return Results.Ok(new BudgetVsActualDto(Months.Format(first), cut, sc, dto,
                 dto.Sum(r => r.Budget), dto.Sum(r => r.Actual), dto.Sum(r => r.Projected)));
         });
+
+        // Detalle de una fila del reporte: los movimientos que suman el real de la categoría en el mes al corte.
+        app.MapGet("/reports/budget-vs-actual/{categoryId:int}/transactions", async (int categoryId, string? month, DateOnly? cutoff, FinanzasDbContext db) =>
+        {
+            var cut = cutoff ?? Today();
+            var first = new DateOnly(cut.Year, cut.Month, 1);
+            if (month is not null && !Months.TryParse(month, out first)) return Results.BadRequest("Mes con formato yyyy-MM.");
+            if (await db.Categories.FindAsync(categoryId) is not { } category) return Results.NotFound();
+
+            var candidates = await db.Transactions.Where(t => t.CategoryId == categoryId).ToListAsync();
+            var list = Budgeting.ActualTransactions(candidates, category.Scope, first, cut)
+                .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
+                .Select(TransactionDto.From);
+            return Results.Ok(list);
+        });
     }
+
+    static Task<List<int>> ScopeCategoryIds(FinanzasDbContext db, Scope scope) =>
+        db.Categories.Where(c => c.Scope == scope).Select(c => c.Id).ToListAsync();
 
     public static void MapSettings(this WebApplication app)
     {

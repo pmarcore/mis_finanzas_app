@@ -175,6 +175,7 @@ classDiagram
         +int RecurringRuleId
         +DateOnly FromMonth
         +long Amount
+        +decimal IncreasePercent [nullable]
     }
     class Budget {
         +int Id
@@ -253,10 +254,14 @@ classDiagram
     class Budgeting {
         <<static>>
         +ConsumesBudget(t) bool
+        +OfScope(budgets, categories, scope) List~Budget~
+        +ActualTransactions(transactions, scope, month, cutoff) IEnumerable~Transaction~
         +BudgetsFor(budgets, month) IReadOnlyList~Budget~
         +Report(categories, budgets, transactions, scope, month, cutoff, settings) List~BudgetRow~
         +AlertFor(pct, projectsExcess, settings) string
         +MonthlyEstimates(categories, budgets, rules, scope, cutoff, until) List~BudgetEstimate~
+        +SourceOf(budgets, month) (bool, DateOnly?)
+        +Propose(categories, budgets, transactions, rules, scope, source, sourceMonth, from, to, useFixed, increasePct) List~ProposalMonth~
     }
     class CashLedger {
         <<record>>
@@ -315,6 +320,7 @@ classDiagram
     Budgeting ..> RecurringRuleExpander : AmountFor
     Budgeting --> BudgetRow : Report()
     Budgeting --> BudgetEstimate : MonthlyEstimates()
+    Budgeting --> ProposalMonth : Propose()
     IInvestmentProvider --> InvestmentPortfolio
     InvestmentPortfolio *-- InvestmentPosition
 ```
@@ -325,7 +331,7 @@ classDiagram
 | `CashImpactBuilder` | Convierte un movimiento en impactos de caja: uno directo, uno por cuota con tarjeta, o dos en una transferencia. |
 | `RecurringRuleExpander` | Monto vigente de un gasto fijo en un mes y los movimientos previstos mes a mes. |
 | `CashFlowCalculator` | Caja al corte, proyección a una fecha, flujo de caja con saldo acumulado y resúmenes de tarjeta pendientes (el mayor entre modelado, real y pago previsto, menos lo pagado). |
-| `Budgeting` | Qué consume presupuesto, presupuesto vs real con proyección y alertas, y gasto estimado de meses futuros no cubierto por gastos fijos. |
+| `Budgeting` | Qué consume presupuesto, presupuesto vs real con proyección y alertas, gasto estimado de meses futuros no cubierto por gastos fijos y borrador para presupuestar meses futuros (`Propose`). |
 | `Savings` | Saldo de ahorro o inversión: lo que salió de la caja hacia ellos menos lo que volvió. |
 | `IInvestmentProvider` | Punto de conexión con un broker (Invertir Online, pendiente). |
 

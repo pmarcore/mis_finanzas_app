@@ -12,9 +12,11 @@ import { ConfiguracionScreen } from '../screens/ConfiguracionScreen';
 import { FijosScreen } from '../screens/FijosScreen';
 import { InicioScreen } from '../screens/InicioScreen';
 import { MediosPagoScreen } from '../screens/MediosPagoScreen';
+import { MovimientosCategoriaScreen } from '../screens/MovimientosCategoriaScreen';
 import { MovimientosScreen } from '../screens/MovimientosScreen';
 import { NuevoMovimientoScreen } from '../screens/NuevoMovimientoScreen';
 import { PresupuestoScreen } from '../screens/PresupuestoScreen';
+import { ProyectarPresupuestoScreen } from '../screens/ProyectarPresupuestoScreen';
 import { ReporteScreen } from '../screens/ReporteScreen';
 import { TarjetasScreen } from '../screens/TarjetasScreen';
 import { TiposOperacionScreen } from '../screens/TiposOperacionScreen';
@@ -95,6 +97,16 @@ export function RootNavigator() {
     >
       <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
       <Stack.Screen name="Reporte" component={ReporteScreen} options={{ title: 'Presupuesto vs. real' }} />
+      <Stack.Screen
+        name="MovimientosCategoria"
+        component={MovimientosCategoriaScreen}
+        options={({ route }) => ({ title: route.params.category })}
+      />
+      <Stack.Screen
+        name="ProyectarPresupuesto"
+        component={ProyectarPresupuestoScreen}
+        options={{ title: 'Proyectar presupuesto' }}
+      />
       <Stack.Screen name="Tarjetas" component={TarjetasScreen} />
       <Stack.Screen name="Configuracion" component={ConfiguracionScreen} options={{ title: 'Configuración' }} />
       <Stack.Screen name="TiposOperacion" component={TiposOperacionScreen} options={{ title: 'Tipos de operación' }} />
