@@ -15,6 +15,7 @@ export type TabParamList = {
   Nuevo: undefined;
   Fijos: undefined;
   Presupuesto: undefined;
+  Inversiones: undefined;
 };
 
 export type RootStackParamList = {
@@ -30,6 +31,10 @@ export type RootStackParamList = {
   Categorias: undefined;
   MediosPago: undefined;
   Ahorro: undefined;
+  /** Detalle de un activo de la cartera o de la lista de seguimiento. `market` 'cripto' usa precios de cripto. */
+  Activo: { source: string; symbol: string; market: string | null };
+  /** Tenencias de Ripio, cartera objetivo, umbrales de señales y lista de seguimiento. */
+  InversionesConfig: undefined;
   EditarMovimiento: { id: number };
 };
 

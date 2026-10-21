@@ -385,3 +385,117 @@ export interface Savings {
     movements: SavingsMovement[];
   };
 }
+
+// ---------- Inversiones (solo Familia) ----------
+export type AssetType = 'acciones' | 'cedears' | 'bonos' | 'ons' | 'fci' | 'cripto' | 'efectivo' | 'otros';
+export type InvestmentCurrency = 'ars' | 'usd';
+
+export interface InvestmentTotals {
+  value: number;
+  gain: number;
+  gainPct: number | null;
+  dailyChange: number;
+  dailyChangePct: number | null;
+  cash: number;
+}
+
+export interface InvestmentSlice {
+  key: string;
+  label: string;
+  ars: number;
+  usd: number;
+  pct: number;
+}
+
+/** Tenencia con las cifras del broker tal cual (en la moneda del activo) y su valor convertido. */
+export interface Holding {
+  source: string;
+  symbol: string;
+  description: string;
+  type: AssetType;
+  currency: InvestmentCurrency;
+  market: string | null;
+  quantity: number;
+  lastPrice: number;
+  avgCost: number | null;
+  dailyChangePct: number | null;
+  gainPct: number | null;
+  gainAmount: number | null;
+  /** true solo en Ripio con costo cargado: lo calcula la app porque Ripio no lo informa. */
+  gainIsComputed: boolean;
+  marketValue: number;
+  valueArs: number;
+  valueUsd: number;
+  pct: number;
+}
+
+export interface InvestmentQuote {
+  symbol: string;
+  market: string;
+  currency: InvestmentCurrency;
+  lastPrice: number;
+  dailyChangePct: number | null;
+  description: string | null;
+}
+
+export interface InvestmentSignal {
+  kind: 'concentracion' | 'objetivo' | 'plataQuieta';
+  severity: 'info' | 'atencion';
+  title: string;
+  detail: string;
+}
+
+/** GET /investments/dashboard */
+export interface InvestmentDashboard {
+  asOf: string | null;
+  stale: boolean;
+  error: string | null;
+  providerConnected: boolean;
+  mep: number | null;
+  ars: InvestmentTotals;
+  usd: InvestmentTotals;
+  byType: InvestmentSlice[];
+  byCurrency: InvestmentSlice[];
+  bySource: InvestmentSlice[];
+  holdings: Holding[];
+  quotes: InvestmentQuote[];
+  signals: InvestmentSignal[];
+  targetsConfigured: boolean;
+}
+
+export interface InvestmentHistoryPoint {
+  date: ISODate;
+  ars: number;
+  usd: number;
+}
+
+export interface PricePoint {
+  date: ISODate;
+  price: number;
+}
+
+export interface ManualHolding {
+  id: Id;
+  source: string;
+  symbol: string;
+  quantity: number;
+  costUsd: number | null;
+  active: boolean;
+}
+
+export type SaveManualHolding = Omit<ManualHolding, 'id' | 'source'>;
+
+export interface InvestmentTarget {
+  assetType: AssetType;
+  targetPct: number;
+}
+
+export interface InvestmentSettings {
+  maxAssetPct: number;
+  maxGroupPct: number;
+  targetDeviationPts: number;
+  idleCashArs: number;
+  idleCashUsd: number;
+  /** Separados por coma: "GGAL", "nyse:SPY", "cripto:BTC". */
+  watchList: string;
+}

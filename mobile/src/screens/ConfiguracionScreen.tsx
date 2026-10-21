@@ -308,6 +308,7 @@ const CATALOGOS = [
   { screen: 'TiposOperacion', label: 'Tipos de operación', hint: 'Por ámbito, si suman o restan de caja' },
   { screen: 'Categorias', label: 'Categorías', hint: 'De gasto e ingreso, por ámbito' },
   { screen: 'MediosPago', label: 'Medios de pago', hint: 'Débito, efectivo, billeteras y tarjetas' },
+  { screen: 'InversionesConfig', label: 'Inversiones', hint: 'Tenencias de Ripio, cartera objetivo y señales' },
 ] as const;
 
 /** Accesos a la configuración de catálogos (cada uno en su pantalla). */

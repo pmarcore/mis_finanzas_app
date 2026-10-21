@@ -20,12 +20,14 @@ flowchart LR
   end
   DB[("SQLite<br/>finanzas.db")]
   GS["Planilla Google<br/>(foto JSON en data/import)"]
-  IOL["Invertir Online<br/>(pendiente de conectar)"]
+  IOL["Invertir Online<br/>(API, solo lectura)"]
+  BN["Precios cripto<br/>(API pública)"]
   UI --> RQ --> CL -->|HTTP JSON| EP
   EP --> DOM
   EP --> INF -->|SQL| DB
   GS -.->|POST /import/sheet| EP
   EP -.->|IInvestmentProvider| IOL
+  EP -.->|ICryptoPrices| BN
 ```
 
 ## Capas
@@ -157,19 +159,33 @@ Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`fami
 | `GET/POST /categories?scope`, `PUT/DELETE /categories/{id}` | Categorías |
 | `GET/POST /payment-methods`, `PUT/DELETE /payment-methods/{id}` | Medios de pago. Lo que está en uso no se borra: se desactiva (`active`) |
 | `GET /savings?scope&date` | Saldo de ahorro e inversiones con sus movimientos y el valor de mercado si hay proveedor |
-| `POST /investments/sync?scope` | Trae el valor de mercado del broker (503 mientras Invertir Online no esté conectado) |
+| `GET /investments/dashboard?refresh` | Dashboard de inversiones de Familia: totales en $ y US$, composición, tenencias con los rendimientos de IOL, cotizaciones y señales. Guarda 15 minutos lo traído; `refresh=true` fuerza una consulta |
+| `POST /investments/sync?scope` | Igual que `dashboard?refresh=true`. 503 si no hay IOL ni tenencias manuales; 404 para Memey |
+| `GET /investments/history?from&to` | Valor total por día (fotos diarias) en $ y US$ |
+| `GET /investments/assets/{symbol}/history?market&months` | Serie de precios de un activo (IOL, o cripto con `market=cripto`) |
+| `GET/POST /investments/manual`, `PUT/DELETE /investments/manual/{id}` | Tenencias cargadas a mano (Ripio) |
+| `GET/PUT /investments/targets` | Cartera objetivo por tipo de activo (suma 100 o vacía) |
+| `GET/PUT /investments/settings` | Umbrales de las señales y lista de seguimiento |
 | `POST /import/sheet?replace` | Carga una foto de la planilla (`data/import`) |
 
 ## Inversiones e Invertir Online
 
-El saldo de inversiones es lo aportado neto (movimientos de tipo Inversión: aportes menos rescates). El valor de mercado
-llega por `IInvestmentProvider` (`Finanzas.Domain/Investments.cs`): hoy está registrado `SinProveedorDeInversiones`, que no
-informa nada, y la app muestra "pendiente de conectar con Invertir Online".
+Spec: [Spec/inversiones-dashboard.md](../Spec/inversiones-dashboard.md). Solo Familia.
 
-Para conectarlo:
-
-1. Implementar `IInvestmentProvider` contra la API de Invertir Online (token con usuario y contraseña, después el
-   portafolio de la cuenta) y devolver cada tenencia como `InvestmentPosition` con su valor en centavos.
-2. Registrarlo en `Program.cs` en lugar de `SinProveedorDeInversiones`, con las credenciales como secretos de configuración
-   (nunca en el repo).
-3. `POST /investments/sync?scope=familia` guarda el valor del día en `InvestmentValuation`; `GET /savings` muestra el último.
+- El saldo de inversiones de Ahorro e inversión sigue siendo lo aportado neto (movimientos de tipo Inversión).
+- **IOL:** `IolInvestmentProvider` (`Finanzas.Infrastructure/InvestmentProviders.cs`) usa la API oficial
+  `api.invertironline.com` solo para leer: `POST /token` (usuario y contraseña, después refresh token, todo en memoria),
+  `GET /api/v2/portafolio/argentina` y `/estados_Unidos`, `GET /api/v2/estadocuenta` (saldo disponible) y cotizaciones.
+  Los rendimientos por activo (`gananciaPorcentaje`, `gananciaDinero`, `variacionDiaria`, `ppc`) se muestran tal cual.
+- **Credenciales:** variables `IOL_USERNAME` e `IOL_PASSWORD` en el `.env` de la raíz (ignorado por git). docker compose
+  las pasa a la API como `Iol__Username` e `Iol__Password`. Sin ellas se registra `SinProveedorDeInversiones` y todo sigue
+  funcionando. La API nunca las devuelve ni las escribe en logs.
+- **Dólar MEP:** precio del AL30 en pesos ÷ precio del AL30D en dólares, de las cotizaciones de IOL.
+- **Ripio:** no tiene API para cuentas personales. Las tenencias se cargan a mano (`ManualHoldings`) y el precio en USD
+  sale de `BinanceCryptoPrices` (API pública sin clave, contra USDT). Con costo cargado, la app calcula el rendimiento y lo
+  marca como calculado.
+- **Fotos diarias:** cada actualización reemplaza las filas del día en `InvestmentSnapshots` y deja el total en pesos en
+  `InvestmentValuations` (lo usan Inicio y Ahorro e inversión). Si IOL falla, el dashboard muestra la última foto con aviso.
+- **Señales** (`InvestmentSignals`, en Dominio): A concentración por activo, tipo y moneda; B desvío contra la cartera
+  objetivo con el monto a mover; D plata quieta (saldo disponible en el broker y caja proyectada a fin de mes sobre el piso
+  de caja). Son informativas, no recomendaciones.

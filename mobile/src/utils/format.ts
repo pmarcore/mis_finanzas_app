@@ -99,3 +99,27 @@ export function parsePercent(text: string): number | null {
 export function amountToInput(n: number | null | undefined): string {
   return n === null || n === undefined ? '' : String(n).replace('.', ',');
 }
+
+/** 1234.5 → "US$ 1.235". Redondea a dólares enteros. */
+export function formatUSD(n: number): string {
+  return formatARS(n).replace('$', 'US$');
+}
+
+/** Monto en la moneda indicada ('ars' | 'usd'). */
+export function formatMoney(n: number, currency: 'ars' | 'usd'): string {
+  return currency === 'usd' ? formatUSD(n) : formatARS(n);
+}
+
+/** Número con hasta `max` decimales a la argentina: 1234.5 → "1.234,5". Para precios y cantidades. */
+export function formatNumber(n: number, max = 2): string {
+  const digits = Math.abs(n) > 0 && Math.abs(n) < 1 ? Math.max(max, 6) : max;
+  const fixed = Math.abs(n).toFixed(digits);
+  const [int, dec] = (fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed).split('.');
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${n < 0 ? '-' : ''}${grouped}${dec ? `,${dec}` : ''}`;
+}
+
+/** 2.5 → "+2,5 %"; -1 → "-1 %". */
+export function formatSignedPct(p: number): string {
+  return `${p > 0 ? '+' : ''}${formatNumber(p, 1)} %`;
+}

@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { Pressable, Text, View } from 'react-native';
 import { useOperationTypes, useSavings } from '../api/endpoints';
 import type { SavingsMovement } from '../api/types';
 import { Card } from '../components/Card';
@@ -17,6 +18,7 @@ export function AhorroScreen() {
   const accent = scopeColor(colors, scope);
   const q = useSavings(scope, cutoff);
   const types = useOperationTypes();
+  const navigation = useNavigation();
   const s = q.data;
 
   const movements = (list: SavingsMovement[]) =>
@@ -66,8 +68,13 @@ export function AhorroScreen() {
                 <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
                   {s.inversion.providerConnected
                     ? 'Todavía no se trajo el valor de mercado.'
-                    : 'Valor de mercado: pendiente de conectar con Invertir Online.'}
+                    : 'Valor de mercado: Invertir Online no está conectado (faltan IOL_USERNAME e IOL_PASSWORD en el .env).'}
                 </Text>
+              )}
+              {scope === 'familia' && (
+                <Pressable onPress={() => navigation.navigate('Tabs', { screen: 'Inversiones' })} accessibilityRole="button">
+                  <Text style={{ color: accent, fontWeight: '600' }}>Ver el dashboard de inversiones</Text>
+                </Pressable>
               )}
               {movements(s.inversion.movements)}
             </Card>

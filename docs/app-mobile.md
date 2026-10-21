@@ -91,7 +91,10 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 | Tarjetas | Cierres y vencimientos por tarjeta | `GET /cards/{id}/cycles` |
 | Configuración | Saldos iniciales de cajas, piso, umbrales, cierres de tarjeta | `GET/PUT /settings`, `PUT /settings/cash-boxes/{id}`, `PUT /cards/{id}/cycles` |
 | Tipos de operación, Categorías, Medios de pago | Listas editables (lo que está en uso se desactiva) | `/operation-types`, `/categories`, `/payment-methods` |
-| Ahorro e inversión | Saldos y movimientos de ahorro e inversiones | `GET /savings` |
+| Ahorro e inversión | Saldos y movimientos de ahorro e inversiones; enlace al dashboard de inversiones | `GET /savings` |
+| Inversiones (tab) | Dashboard de Familia: totales en $ o US$, anillo de composición (tipo, moneda, broker), evolución diaria, barras de rendimiento por activo, tenencias, cotizaciones (MEP y lista de seguimiento) y oportunidades y rotación. Actualizar fuerza una consulta a IOL | `GET /investments/dashboard`, `GET /investments/history` |
+| Activo | Detalle de un activo: gráfico de precio (1M a 1A) con línea en el PPC y las cifras del broker | `GET /investments/assets/{symbol}/history` |
+| Inversiones (Configuración) | Tenencias de Ripio, cartera objetivo y umbrales de señales y lista de seguimiento | `/investments/manual`, `/investments/targets`, `/investments/settings` |
 
 Los catálogos (`/people`, `/categories`, `/payment-methods`, `/operation-types`) se piden donde hacen falta para llenar
 los combos de los formularios.
@@ -100,5 +103,6 @@ los combos de los formularios.
 
 `src/components/`: `Screen` (contenedor con pull-to-refresh), `Card`, `MoneyText`, `ScopeSelector`, `CutoffControl`
 (fecha de corte), `MonthStepper`, `Select` (combo desplegable, usado en todos los formularios), `Segmented`,
-`ChipPicker`, `Field`/`Input`/`DateInput`, `FormBits` (`SwitchRow`, `FormButtons`, `NewButton`) y `QueryState`
-(carga, error con reintento y vacío).
+`ChipPicker`, `Field`/`Input`/`DateInput`, `FormBits` (`SwitchRow`, `FormButtons`, `NewButton`), `QueryState`
+(carga, error con reintento y vacío) y `Charts` (`DonutChart`, `LineChart`, `DivergingBars`, hechos con react-native-svg;
+colores fijos por tipo de activo).

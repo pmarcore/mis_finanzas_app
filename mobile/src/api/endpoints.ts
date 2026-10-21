@@ -16,16 +16,23 @@ import type {
   ConfirmTransaction,
   Dashboard,
   Id,
+  InvestmentDashboard,
+  InvestmentHistoryPoint,
+  InvestmentSettings,
+  InvestmentTarget,
   ISODate,
+  ManualHolding,
   Month,
   NewRecurringRule,
   NewTransaction,
   OperationType,
   PaymentMethod,
   Person,
+  PricePoint,
   RecurringRule,
   RecurringRuleSaveResult,
   Savings,
+  SaveManualHolding,
   Scope,
   Settings,
   Transaction,
@@ -402,5 +409,109 @@ export function useSavings(scope: Scope, date: ISODate) {
   return useQuery({
     queryKey: queryKeys.savings(scope, date),
     queryFn: ({ signal }) => api.get<Savings>('/savings', { scope, date }, signal),
+  });
+}
+
+// ---------- Inversiones ----------
+const investmentKeys = {
+  dashboard: ['investments', 'dashboard'] as const,
+  history: ['investments', 'history'] as const,
+  asset: (symbol: string, market: string | null, months: number) => ['investments', 'asset', symbol, market, months] as const,
+  manual: ['investments', 'manual'] as const,
+  targets: ['investments', 'targets'] as const,
+  settings: ['investments', 'settings'] as const,
+};
+
+/** El backend guarda lo traído de IOL 15 minutos; `refresh` (botón Actualizar) fuerza una consulta nueva. */
+export function useInvestmentDashboard() {
+  return useQuery({
+    queryKey: investmentKeys.dashboard,
+    queryFn: ({ signal }) => api.get<InvestmentDashboard>('/investments/dashboard', undefined, signal),
+  });
+}
+
+export function useRefreshInvestments() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.get<InvestmentDashboard>('/investments/dashboard', { refresh: true }),
+    onSuccess: (data) => {
+      qc.setQueryData(investmentKeys.dashboard, data);
+      qc.invalidateQueries({ queryKey: investmentKeys.history });
+      qc.invalidateQueries({ queryKey: ['savings'] });
+    },
+  });
+}
+
+export function useInvestmentHistory() {
+  return useQuery({
+    queryKey: investmentKeys.history,
+    queryFn: ({ signal }) => api.get<InvestmentHistoryPoint[]>('/investments/history', undefined, signal),
+  });
+}
+
+export function useAssetHistory(symbol: string, market: string | null, months: number) {
+  return useQuery({
+    queryKey: investmentKeys.asset(symbol, market, months),
+    queryFn: ({ signal }) =>
+      api.get<PricePoint[]>(`/investments/assets/${encodeURIComponent(symbol)}/history`, { market, months }, signal),
+  });
+}
+
+export function useManualHoldings() {
+  return useQuery({
+    queryKey: investmentKeys.manual,
+    queryFn: ({ signal }) => api.get<ManualHolding[]>('/investments/manual', undefined, signal),
+  });
+}
+
+export function useManualHoldingMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: investmentKeys.manual });
+    qc.invalidateQueries({ queryKey: investmentKeys.dashboard });
+  };
+  return {
+    create: useMutation({ mutationFn: (h: SaveManualHolding) => api.post<ManualHolding>('/investments/manual', h), onSuccess: invalidate }),
+    update: useMutation({
+      mutationFn: ({ id, ...h }: SaveManualHolding & { id: Id }) => api.put<ManualHolding>(`/investments/manual/${id}`, h),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({ mutationFn: (id: Id) => api.delete(`/investments/manual/${id}`), onSuccess: invalidate }),
+  };
+}
+
+export function useInvestmentTargets() {
+  return useQuery({
+    queryKey: investmentKeys.targets,
+    queryFn: ({ signal }) => api.get<InvestmentTarget[]>('/investments/targets', undefined, signal),
+  });
+}
+
+export function useSaveInvestmentTargets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (targets: InvestmentTarget[]) => api.put<InvestmentTarget[]>('/investments/targets', targets),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: investmentKeys.targets });
+      qc.invalidateQueries({ queryKey: investmentKeys.dashboard });
+    },
+  });
+}
+
+export function useInvestmentSettings() {
+  return useQuery({
+    queryKey: investmentKeys.settings,
+    queryFn: ({ signal }) => api.get<InvestmentSettings>('/investments/settings', undefined, signal),
+  });
+}
+
+export function useSaveInvestmentSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (s: InvestmentSettings) => api.put<InvestmentSettings>('/investments/settings', s),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: investmentKeys.settings });
+      qc.invalidateQueries({ queryKey: investmentKeys.dashboard });
+    },
   });
 }

@@ -5,12 +5,15 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Pressable } from 'react-native';
 import { useScope } from '../state/scope';
 import { scopeColor, useTheme } from '../theme';
+import { ActivoScreen } from '../screens/ActivoScreen';
 import { AhorroScreen } from '../screens/AhorroScreen';
 import { CategoriasScreen } from '../screens/CategoriasScreen';
 import { EditarMovimientoScreen } from '../screens/EditarMovimientoScreen';
 import { ConfiguracionScreen } from '../screens/ConfiguracionScreen';
 import { FijosScreen } from '../screens/FijosScreen';
 import { InicioScreen } from '../screens/InicioScreen';
+import { InversionesConfigScreen } from '../screens/InversionesConfigScreen';
+import { InversionesScreen } from '../screens/InversionesScreen';
 import { MediosPagoScreen } from '../screens/MediosPagoScreen';
 import { MovimientosCategoriaScreen } from '../screens/MovimientosCategoriaScreen';
 import { MovimientosScreen } from '../screens/MovimientosScreen';
@@ -32,6 +35,7 @@ const TAB_ICONS: Record<keyof TabParamList, IconName> = {
   Nuevo: 'add-circle',
   Fijos: 'repeat-outline',
   Presupuesto: 'pie-chart-outline',
+  Inversiones: 'trending-up-outline',
 };
 
 function GearButton() {
@@ -80,6 +84,7 @@ function Tabs() {
       />
       <Tab.Screen name="Fijos" component={FijosScreen} />
       <Tab.Screen name="Presupuesto" component={PresupuestoScreen} />
+      <Tab.Screen name="Inversiones" component={InversionesScreen} />
     </Tab.Navigator>
   );
 }
@@ -113,6 +118,8 @@ export function RootNavigator() {
       <Stack.Screen name="Categorias" component={CategoriasScreen} options={{ title: 'Categorías' }} />
       <Stack.Screen name="MediosPago" component={MediosPagoScreen} options={{ title: 'Medios de pago' }} />
       <Stack.Screen name="Ahorro" component={AhorroScreen} options={{ title: 'Ahorro e inversión' }} />
+      <Stack.Screen name="Activo" component={ActivoScreen} options={({ route }) => ({ title: route.params.symbol })} />
+      <Stack.Screen name="InversionesConfig" component={InversionesConfigScreen} options={{ title: 'Inversiones' }} />
       <Stack.Screen name="EditarMovimiento" component={EditarMovimientoScreen} options={{ title: 'Editar movimiento' }} />
     </Stack.Navigator>
   );

@@ -42,6 +42,7 @@ Versión declarada en `package.json` y versión instalada según `package-lock.j
 | react | 19.2.3 | 19.2.3 | UI |
 | react-dom | 19.2.3 | 19.2.3 | Render web |
 | react-native-web | ~0.21.0 | 0.21.4 | Correr la app en el navegador |
+| react-native-svg | 15.15.4 | 15.15.4 | Gráficos del dashboard de inversiones (anillo, línea) |
 | @expo/metro-runtime | ~57.0.16 | 57.0.17 | Runtime de Metro para web |
 | @react-navigation/native | ^7.5.0 | 7.5.0 | Navegación |
 | @react-navigation/bottom-tabs | ^7.20.0 | 7.20.0 | Barra de tabs inferior |
