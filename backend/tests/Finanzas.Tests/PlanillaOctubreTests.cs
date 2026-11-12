@@ -17,8 +17,13 @@ public class PlanillaOctubreTests : IClassFixture<PlanillaOctubreTests.Api>
         readonly string dbPath = Path.Combine(Path.GetTempPath(), $"finanzas-test-{Guid.NewGuid():N}.db");
         public JsonElement Import = default;
 
-        protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
             builder.UseSetting("ConnectionStrings:Finanzas", $"Data Source={dbPath}");
+            // Estos tests prueban los cálculos; el login tiene los suyos (LoginYBackupTests).
+            builder.UseSetting("Auth:Required", "false");
+            builder.UseSetting("Backup:Enabled", "false");
+        }
 
         public async Task EnsureImportedAsync()
         {

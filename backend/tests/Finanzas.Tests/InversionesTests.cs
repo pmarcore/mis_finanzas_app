@@ -154,6 +154,8 @@ public class InversionesTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseSetting("ConnectionStrings:Finanzas", $"Data Source={dbPath}");
+            builder.UseSetting("Auth:Required", "false");
+            builder.UseSetting("Backup:Enabled", "false");
             builder.ConfigureTestServices(s =>
             {
                 s.AddSingleton<IInvestmentProvider>(provider);

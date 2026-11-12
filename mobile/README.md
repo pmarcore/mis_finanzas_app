@@ -21,7 +21,7 @@ npm run typecheck         # equivale a npx tsc --noEmit
 
 | Variable | Default | Uso |
 |---|---|---|
-| `EXPO_PUBLIC_API_URL` | IP de la PC que corre `npx expo start`, puerto 5080 | URL base del backend .NET. Opcional: definila en `.env` (ver `.env.example`) solo si la API corre en otra máquina |
+| `EXPO_PUBLIC_API_URL` | En la web publicada, el mismo sitio; en desarrollo, la IP de la PC que corre `npx expo start`, puerto 5080 | URL base del backend .NET. Opcional: definila en `.env` (ver `.env.example`) solo si la API corre en otra máquina |
 
 Sin la variable, la app toma la IP de la PC que sirve Expo (`src/api/client.ts`), así que desde un teléfono en el mismo Wi-Fi o desde el emulador llega a la API sin configurar nada.
 
@@ -35,7 +35,7 @@ mobile/
 ├── .env.example
 └── src/
     ├── api/
-    │   ├── client.ts        # fetch con URL base, JSON y token bearer (placeholder)
+    │   ├── client.ts        # fetch con URL base, JSON y token bearer de la sesión; 401 → vuelve al login
     │   ├── types.ts         # tipos del dominio (espejo del backend)
     │   └── endpoints.ts     # hooks de react-query por endpoint
     ├── state/
@@ -78,3 +78,10 @@ La fuente de verdad es `backend/src/Finanzas.Api/Endpoints.cs` y `Dtos.cs`; `src
 - Texto de la interfaz en español (Argentina).
 - Agregar dependencias con `npx expo install <paquete>` para que las versiones coincidan con el SDK.
 - No duplicar cálculos del backend en el cliente.
+
+## Login y PWA
+
+- `src/state/auth.tsx` maneja la sesión: al arrancar pide `GET /auth/me`; sin sesión válida muestra `LoginScreen`. La
+  sesión se guarda con `expo-secure-store` en nativo y en `localStorage` en web (`src/utils/tokenStorage.ts`).
+- `public/` tiene el `index.html`, `manifest.json`, íconos y un service worker mínimo (sin caché) para que la web
+  exportada (`npx expo export --platform web`) se pueda instalar en la pantalla de inicio. Ver `docs/despliegue.md`.

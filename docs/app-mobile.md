@@ -79,6 +79,7 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 
 | Pantalla | Para qué | Endpoints |
 | --- | --- | --- |
+| Login | Usuario y contraseña de cada persona; se muestra si no hay sesión guardada o si la API la rechaza (vencida o contraseña cambiada). La sesión se guarda en `expo-secure-store` (nativo) o en el navegador (web) | `POST /auth/login`, `GET /auth/me` |
 | Inicio | Caja actual, fin de mes, trimestral, Memey, pagos de tarjeta, ahorro | `GET /dashboard`, `GET /savings` |
 | Movimientos | Lista de movimientos (filtrable por medio de pago, por categoría del ámbito y por gastos fijos, con "Todos") y flujo de caja con saldo acumulado; confirmar previstos; tocar un movimiento abre Editar movimiento (mantener apretado lo borra) | `GET /transactions?categoryId&paymentMethodId&recurring`, `GET /cashflow`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` |
 | Editar movimiento | El mismo formulario que el alta, precargado; guardar o borrar con confirmación | `GET/PUT/DELETE /transactions/{id}`, `GET /cards/{id}/due-date` |
@@ -89,7 +90,7 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 | Presupuesto vs. real | Reporte de una entidad (Familia o Memey) con fecha de corte y alertas; tocar una categoría abre sus movimientos | `GET /reports/budget-vs-actual` |
 | Movimientos de una categoría | Los movimientos que suman el real de la categoría en el mes al corte, con el total; tocar uno abre Editar movimiento | `GET /reports/budget-vs-actual/{categoryId}/transactions` |
 | Tarjetas | Detalle de cada resumen por mes de vencimiento, de una tarjeta o de todas (vista unificada): cabecera modelado/real/pagado/pendiente y una línea por cuota con marcas Fijo, Previsto y Compra anterior; filtro Todos / Solo fijos / Sin fijos; tocar una línea abre Editar movimiento. Con una tarjeta elegida, sus cierres y vencimientos | `GET /cards/statements/months`, `GET /cards/statements/{dueMonth}`, `GET /cards/{id}/cycles` |
-| Configuración | Saldos iniciales de cajas, piso, umbrales, cierres de tarjeta | `GET/PUT /settings`, `PUT /settings/cash-boxes/{id}`, `PUT /cards/{id}/cycles` |
+| Configuración | Saldos iniciales de cajas, piso, umbrales, cierres de tarjeta; Cuenta y backup: quién entró, descargar backup (web) y cerrar sesión | `GET/PUT /settings`, `PUT /settings/cash-boxes/{id}`, `PUT /cards/{id}/cycles`, `GET /backup/download` |
 | Tipos de operación, Categorías, Medios de pago | Listas editables (lo que está en uso se desactiva) | `/operation-types`, `/categories`, `/payment-methods` |
 | Ahorro e inversión | Saldos y movimientos de ahorro e inversiones; enlace al dashboard de inversiones | `GET /savings` |
 | Inversiones (tab) | Dashboard de Familia: totales en $ o US$, anillo de composición (tipo, moneda, broker), evolución diaria, barras de rendimiento por activo, tenencias, cotizaciones (MEP y lista de seguimiento) y oportunidades y rotación. Actualizar fuerza una consulta a IOL | `GET /investments/dashboard`, `GET /investments/history` |

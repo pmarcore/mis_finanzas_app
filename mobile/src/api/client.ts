@@ -1,20 +1,29 @@
 // Wrapper mínimo sobre fetch para hablar con el backend .NET.
 
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-// Sin EXPO_PUBLIC_API_URL, usa la misma PC que sirve la app en Expo (puerto 5080):
-// así no hay que tocar .env cada vez que cambia la IP de la red.
+// Sin EXPO_PUBLIC_API_URL:
+// - la app web publicada (PWA) la sirve la misma API, así que usa el mismo sitio;
+// - en desarrollo usa la misma PC que sirve la app en Expo (puerto 5080), así no hay que tocar .env cuando cambia la IP.
 function defaultApiUrl(): string {
+  if (Platform.OS === 'web' && !__DEV__ && typeof window !== 'undefined') return window.location.origin;
   const host = Constants.expoConfig?.hostUri?.split(':')[0];
   return `http://${host || 'localhost'}:5080`;
 }
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL || defaultApiUrl()).replace(/\/+$/, '');
 
-// TODO: reemplazar por el token real cuando exista autenticación.
+// Token de la sesión (lo pone el AuthProvider al loguearse o al arrancar con uno guardado).
 let authToken: string | null = null;
 export function setAuthToken(token: string | null) {
   authToken = token;
+}
+
+// Si la API responde 401 con un token puesto, la sesión venció o se cerró: el AuthProvider vuelve al login.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
 }
 
 export class ApiError extends Error {
@@ -76,6 +85,8 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     }
   }
 
+  if (res.status === 401 && authToken && !path.startsWith('/auth/')) onUnauthorized?.();
+
   if (!res.ok) {
     // El backend responde los 400/404 con un string en español (Results.BadRequest("...")),
     // o con ProblemDetails ({ title, detail }) en errores del framework.
@@ -99,3 +110,24 @@ export const api = {
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
+
+/**
+ * Descarga un archivo de la API con la sesión puesta (solo web: en la PWA el navegador lo guarda o lo comparte).
+ * Devuelve false si no se puede en esta plataforma.
+ */
+export async function downloadFile(path: string, fallbackName: string): Promise<boolean> {
+  if (Platform.OS !== 'web') return false;
+  const res = await fetch(buildUrl(path), { headers: authToken ? { Authorization: `Bearer ${authToken}` } : {} });
+  if (res.status === 401 && authToken) onUnauthorized?.();
+  if (!res.ok) throw new ApiError(res.status, `No se pudo descargar (${res.status}).`);
+  const name = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return true;
+}
