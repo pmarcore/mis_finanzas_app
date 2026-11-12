@@ -57,6 +57,51 @@ export interface CardCycle {
   dueDate: ISODate;
 }
 
+/** Mes de vencimiento con resúmenes, para el combo de la pantalla Tarjetas. */
+export interface CardStatementMonth {
+  dueMonth: Month;
+  total: number;
+  outstanding: number;
+}
+
+/** Una línea del resumen: una cuota de una compra (o un fijo, o un reintegro si es positiva). */
+export interface CardStatementLine {
+  transactionId: Id;
+  purchaseDate: ISODate;
+  description: string;
+  categoryId: Id | null;
+  personId: Id;
+  /** Negativa para gastos, positiva para reintegros. */
+  amount: number;
+  installment: number;
+  installments: number;
+  status: TransactionStatus;
+  recurringRuleId: Id | null;
+  isPriorCommitment: boolean;
+}
+
+/** Resumen de una tarjeta en un vencimiento. Los montos de cabecera no dependen del filtro de fijos. */
+export interface CardStatement {
+  cardId: Id;
+  card: string;
+  dueDate: ISODate;
+  modeled: number;
+  confirmed: number | null;
+  paid: number;
+  expected: number;
+  outstanding: number;
+  /** Gastado en las líneas que quedan con el filtro. */
+  filteredTotal: number;
+  lines: CardStatementLine[];
+}
+
+export interface CardStatementsMonth {
+  dueMonth: Month;
+  total: number;
+  filteredTotal: number;
+  cards: CardStatement[];
+}
+
 export type CategoryKind = 'ingreso' | 'gasto';
 export type BudgetType = 'fijo' | 'variable' | 'deuda';
 

@@ -80,7 +80,7 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 | Pantalla | Para qué | Endpoints |
 | --- | --- | --- |
 | Inicio | Caja actual, fin de mes, trimestral, Memey, pagos de tarjeta, ahorro | `GET /dashboard`, `GET /savings` |
-| Movimientos | Lista de movimientos (filtrable por medio de pago y por categoría del ámbito, con "Todos") y flujo de caja con saldo acumulado; confirmar previstos; tocar un movimiento abre Editar movimiento (mantener apretado lo borra) | `GET /transactions?categoryId&paymentMethodId`, `GET /cashflow`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` |
+| Movimientos | Lista de movimientos (filtrable por medio de pago, por categoría del ámbito y por gastos fijos, con "Todos") y flujo de caja con saldo acumulado; confirmar previstos; tocar un movimiento abre Editar movimiento (mantener apretado lo borra) | `GET /transactions?categoryId&paymentMethodId&recurring`, `GET /cashflow`, `POST /transactions/{id}/confirm`, `DELETE /transactions/{id}` |
 | Editar movimiento | El mismo formulario que el alta, precargado; guardar o borrar con confirmación | `GET/PUT/DELETE /transactions/{id}`, `GET /cards/{id}/due-date` |
 | Nuevo movimiento | Alta con tipo, categoría, medio, cuotas y vencimiento propuesto | `POST /transactions`, `GET /cards/{id}/due-date` |
 | Fijos | Gastos fijos con vigencia desde-hasta, cambios de monto e incrementos % por mes, y proyección mes a mes en el formulario | `GET/POST/PUT/DELETE /recurring-rules` |
@@ -88,7 +88,7 @@ la caja actual o la de fin de mes (`src/navigation/types.ts`).
 | Proyectar presupuesto | Borrador de meses futuros: fuente (presupuesto de un mes o real de un mes cerrado), usar gastos fijos, ajuste %, desde/hasta; se edita mes a mes y se guardan todos juntos | `GET /budgets/proposal`, `PUT /budgets` |
 | Presupuesto vs. real | Reporte de una entidad (Familia o Memey) con fecha de corte y alertas; tocar una categoría abre sus movimientos | `GET /reports/budget-vs-actual` |
 | Movimientos de una categoría | Los movimientos que suman el real de la categoría en el mes al corte, con el total; tocar uno abre Editar movimiento | `GET /reports/budget-vs-actual/{categoryId}/transactions` |
-| Tarjetas | Cierres y vencimientos por tarjeta | `GET /cards/{id}/cycles` |
+| Tarjetas | Detalle de cada resumen por mes de vencimiento, de una tarjeta o de todas (vista unificada): cabecera modelado/real/pagado/pendiente y una línea por cuota con marcas Fijo, Previsto y Compra anterior; filtro Todos / Solo fijos / Sin fijos; tocar una línea abre Editar movimiento. Con una tarjeta elegida, sus cierres y vencimientos | `GET /cards/statements/months`, `GET /cards/statements/{dueMonth}`, `GET /cards/{id}/cycles` |
 | Configuración | Saldos iniciales de cajas, piso, umbrales, cierres de tarjeta | `GET/PUT /settings`, `PUT /settings/cash-boxes/{id}`, `PUT /cards/{id}/cycles` |
 | Tipos de operación, Categorías, Medios de pago | Listas editables (lo que está en uso se desactiva) | `/operation-types`, `/categories`, `/payment-methods` |
 | Ahorro e inversión | Saldos y movimientos de ahorro e inversiones; enlace al dashboard de inversiones | `GET /savings` |

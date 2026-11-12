@@ -178,8 +178,19 @@ public class CashFlowCalculator(
     public IEnumerable<(int CardId, DateOnly DueDate, long Expected, long Outstanding)> CardStatements(Scope? scope, DateOnly cutoff, DateOnly until) =>
         CardOutstanding(Impacts(scope).ToList(), cutoff, until);
 
+    /// <summary>Resúmenes por tarjeta y vencimiento con el desglose completo (modelado, real, pagado), hasta 'until'.</summary>
+    public IEnumerable<CardStatementSummary> CardStatementDetails(Scope? scope, DateOnly cutoff, DateOnly until) =>
+        StatementSummaries(Impacts(scope).ToList(), cutoff, until);
+
+    /// <summary>Líneas de resumen (una por cuota) del ámbito: compras con tarjeta, fijos previstos, compromisos previos y reintegros.</summary>
+    public IEnumerable<(Transaction Tx, CashImpact Impact)> CardLines(Scope? scope) =>
+        Impacts(scope).Where(x => x.Impact.CardId is not null);
+
     IEnumerable<(int CardId, DateOnly DueDate, long Expected, long Outstanding)> CardOutstanding(
-        List<(Transaction Tx, CashImpact Impact)> impacts, DateOnly cutoff, DateOnly until)
+        List<(Transaction Tx, CashImpact Impact)> impacts, DateOnly cutoff, DateOnly until) =>
+        StatementSummaries(impacts, cutoff, until).Select(s => (s.CardId, s.DueDate, s.Expected, s.Outstanding));
+
+    IEnumerable<CardStatementSummary> StatementSummaries(List<(Transaction Tx, CashImpact Impact)> impacts, DateOnly cutoff, DateOnly until)
     {
         var modeled = impacts.Where(x => x.Impact.CardId is not null)
             .GroupBy(x => (Card: x.Impact.CardId!.Value, Due: x.Impact.ImpactDate))
@@ -194,13 +205,20 @@ public class CashFlowCalculator(
         var keys = modeled.Keys.Union(payments.Keys).Where(k => k.Due <= until).Distinct();
         foreach (var k in keys.OrderBy(k => k.Due))
         {
-            var confirmed = statements.FirstOrDefault(s => s.PaymentMethodId == k.Card && s.DueDate == k.Due)?.ConfirmedAmount ?? 0;
+            var confirmed = statements.FirstOrDefault(s => s.PaymentMethodId == k.Card && s.DueDate == k.Due)?.ConfirmedAmount;
             var pay = payments.GetValueOrDefault(k);
-            var expected = Math.Max(Math.Max(modeled.GetValueOrDefault(k), confirmed), pay.Planned + pay.Paid);
-            yield return (k.Card, k.Due, expected, Math.Max(0, expected - pay.Paid));
+            var model = modeled.GetValueOrDefault(k);
+            var expected = Math.Max(Math.Max(model, confirmed ?? 0), pay.Planned + pay.Paid);
+            yield return new CardStatementSummary(k.Card, k.Due, model, confirmed, pay.Paid, expected, Math.Max(0, expected - pay.Paid));
         }
     }
 }
+
+/// <summary>
+/// Un resumen de tarjeta: lo modelado (suma de líneas), el real confirmado, lo pagado al corte, lo esperado
+/// (el mayor entre modelado, real y pago previsto + pagado) y lo pendiente.
+/// </summary>
+public record CardStatementSummary(int CardId, DateOnly DueDate, long Modeled, long? Confirmed, long Paid, long Expected, long Outstanding);
 
 /// <summary>Saldos de ahorro e inversión: lo que salió de la caja hacia ellos menos lo que volvió. Se ven aparte de la caja.</summary>
 public static class Savings

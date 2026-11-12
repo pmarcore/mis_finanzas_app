@@ -10,6 +10,8 @@ import type {
   BudgetVsActual,
   CardCycle,
   CardDueDate,
+  CardStatementMonth,
+  CardStatementsMonth,
   CashBox,
   CashFlow,
   Category,
@@ -46,6 +48,8 @@ export const queryKeys = {
   transactions: (filters: TransactionFilters) => ['transactions', filters] as const,
   cardDueDate: (cardId: Id, purchaseDate: ISODate) => ['cards', cardId, 'due-date', purchaseDate] as const,
   cardCycles: (cardId: Id) => ['cards', cardId, 'cycles'] as const,
+  cardStatementMonths: (scope: Scope) => ['cards', 'statements', 'months', scope] as const,
+  cardStatements: (q: CardStatementsQuery) => ['cards', 'statements', q] as const,
   recurringRules: (scope?: Scope) => ['recurring-rules', scope ?? 'todos'] as const,
   budgets: (month: Month, scope: Scope) => ['budgets', month, scope] as const,
   budgetSource: (month: Month, scope: Scope) => ['budgets', 'source', month, scope] as const,
@@ -88,6 +92,8 @@ export interface TransactionFilters {
   status?: TransactionStatus;
   categoryId?: Id;
   paymentMethodId?: Id;
+  /** true: solo movimientos de gastos fijos; false: sin ellos. */
+  recurring?: boolean;
 }
 
 export function useTransactions(filters: TransactionFilters = {}) {
@@ -107,6 +113,7 @@ function useInvalidateMovements() {
       qc.invalidateQueries({ queryKey: ['cashflow'] }),
       qc.invalidateQueries({ queryKey: ['reports'] }),
       qc.invalidateQueries({ queryKey: ['savings'] }),
+      qc.invalidateQueries({ queryKey: ['cards', 'statements'] }),
     ]);
 }
 
@@ -170,6 +177,36 @@ export function useCardCycles(cardId: Id | undefined) {
   });
 }
 
+export interface CardStatementsQuery {
+  scope: Scope;
+  dueMonth: Month;
+  /** Sin tarjeta: todas (vista unificada). */
+  cardId?: Id;
+  /** true: solo fijos; false: sin fijos; sin valor: todos. */
+  recurring?: boolean;
+}
+
+export function useCardStatementMonths(scope: Scope) {
+  return useQuery({
+    queryKey: queryKeys.cardStatementMonths(scope),
+    queryFn: ({ signal }) => api.get<CardStatementMonth[]>('/cards/statements/months', { scope }, signal),
+  });
+}
+
+/** Detalle de los resúmenes que vencen en un mes, una línea por cuota. */
+export function useCardStatements(q: CardStatementsQuery | undefined) {
+  return useQuery({
+    queryKey: queryKeys.cardStatements(q!),
+    queryFn: ({ signal }) =>
+      api.get<CardStatementsMonth>(
+        `/cards/statements/${q!.dueMonth}`,
+        { scope: q!.scope, cardId: q!.cardId, recurring: q!.recurring },
+        signal,
+      ),
+    enabled: q !== undefined,
+  });
+}
+
 export function useUpdateCardCycles(cardId: Id | undefined) {
   const qc = useQueryClient();
   return useMutation({
@@ -177,6 +214,7 @@ export function useUpdateCardCycles(cardId: Id | undefined) {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: ['cards', cardId] }),
+        qc.invalidateQueries({ queryKey: ['cards', 'statements'] }),
         // Los gastos fijos con esta tarjeta se regeneran en el backend.
         qc.invalidateQueries({ queryKey: ['transactions'] }),
         qc.invalidateQueries({ queryKey: ['dashboard'] }),
@@ -198,6 +236,7 @@ function useInvalidateRules() {
   return () =>
     Promise.all([
       qc.invalidateQueries({ queryKey: ['recurring-rules'] }),
+      qc.invalidateQueries({ queryKey: ['cards', 'statements'] }),
       qc.invalidateQueries({ queryKey: ['transactions'] }),
       qc.invalidateQueries({ queryKey: ['dashboard'] }),
       qc.invalidateQueries({ queryKey: ['cashflow'] }),

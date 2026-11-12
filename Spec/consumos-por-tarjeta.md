@@ -1,6 +1,6 @@
 # Spec: consumos por tarjeta de crédito
 
-Estado: **borrador, esperando la aprobación de Pablo**
+Estado: **aprobada** (PR 19, 2026-11-12). Preguntas 2 a 4 resueltas con lo recomendado.
 Pedido: Pablo, 2026-11-12 (hilo "Consumos por tarjeta de crédito")
 
 > "Quiero ver el detalle de consumos realizados por cada tarjeta de crédito y también una vista unificada. También debo poder ver los gastos fijos que tengo con las tarjetas en un filtro aparte."

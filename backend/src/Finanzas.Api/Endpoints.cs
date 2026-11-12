@@ -53,6 +53,10 @@ public static class Endpoints
         return null;
     }
 
+    /// <summary>Calculadora sin gasto estimado: alcanza para los resúmenes de tarjeta, que no dependen del presupuesto.</summary>
+    static async Task<CashFlowCalculator> CardCalculator(FinanzasDbContext db) =>
+        new(await db.CashBoxes.ToListAsync(), await db.Transactions.Include(t => t.Impacts).ToListAsync(), await db.Statements.ToListAsync());
+
     static Task<Dictionary<int, string>> CardNames(FinanzasDbContext db) =>
         db.PaymentMethods.Where(m => m.Type == PaymentMethodType.Tarjeta).ToDictionaryAsync(m => m.Id, m => m.Name);
 
@@ -176,12 +180,13 @@ public static class Endpoints
     {
         var tx = app.MapGroup("/transactions");
 
-        tx.MapGet("/", async (string? scope, DateOnly? from, DateOnly? to, TransactionStatus? status, int? categoryId, int? paymentMethodId, FinanzasDbContext db) =>
+        tx.MapGet("/", async (string? scope, DateOnly? from, DateOnly? to, TransactionStatus? status, int? categoryId, int? paymentMethodId, bool? recurring, FinanzasDbContext db) =>
         {
             var sc = ParseScope(scope);
             var list = await db.Transactions
                 .Where(t => (sc == null || t.Scope == sc) && (from == null || t.Date >= from) && (to == null || t.Date <= to) && (status == null || t.Status == status))
                 .Where(t => (categoryId == null || t.CategoryId == categoryId) && (paymentMethodId == null || t.PaymentMethodId == paymentMethodId))
+                .Where(t => recurring == null || (t.RecurringRuleId != null) == recurring)
                 .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).ToListAsync();
             return list.Select(TransactionDto.From);
         });
@@ -259,6 +264,55 @@ public static class Endpoints
             var cycles = await db.CardCycles.Where(c => c.PaymentMethodId == id).ToListAsync();
             var due = CardCalendar.ProposeDueDate(cycles, purchaseDate);
             return due is { } d ? Results.Ok(new CardDueDateDto(id, purchaseDate, d)) : Results.NotFound("No hay cierre cargado para esa fecha.");
+        });
+
+        // Meses de vencimiento con resúmenes de la entidad, para el combo de la pantalla Tarjetas.
+        cards.MapGet("/statements/months", async (string? scope, FinanzasDbContext db) =>
+        {
+            var calc = await CardCalculator(db);
+            var cards = await CardNames(db);
+            return calc.CardStatementDetails(ScopeOrFamilia(scope), Today(), DateOnly.MaxValue)
+                .Where(s => cards.ContainsKey(s.CardId))
+                .GroupBy(s => Months.Format(s.DueDate))
+                .OrderBy(g => g.Key)
+                .Select(g => new CardStatementMonthDto(g.Key, Money.Pesos(g.Sum(s => s.Expected)), Money.Pesos(g.Sum(s => s.Outstanding))));
+        });
+
+        // Detalle de los resúmenes que vencen en un mes: una línea por cuota. Sin cardId, todas las tarjetas (vista unificada).
+        // El filtro de fijos cambia las líneas y el subtotal filtrado, no la cabecera de cada resumen.
+        cards.MapGet("/statements/{dueMonth}", async (string dueMonth, string? scope, int? cardId, bool? recurring, FinanzasDbContext db) =>
+        {
+            if (!Months.TryParse(dueMonth, out var first)) return Results.BadRequest("El mes es inválido (AAAA-MM).");
+            var cards = await CardNames(db);
+            if (cardId is { } id && !cards.ContainsKey(id)) return Results.NotFound("No es una tarjeta.");
+            var sc = ScopeOrFamilia(scope);
+            var last = Months.EndOf(first);
+            var calc = await CardCalculator(db);
+
+            var lines = calc.CardLines(sc)
+                .Where(x => x.Impact.ImpactDate >= first && x.Impact.ImpactDate <= last && (cardId == null || x.Impact.CardId == cardId))
+                .ToLookup(x => (Card: x.Impact.CardId!.Value, Due: x.Impact.ImpactDate));
+
+            var result = calc.CardStatementDetails(sc, Today(), last)
+                .Where(s => s.DueDate >= first && cards.ContainsKey(s.CardId) && (cardId == null || s.CardId == cardId))
+                .OrderBy(s => s.DueDate).ThenBy(s => cards[s.CardId])
+                .Select(s =>
+                {
+                    var own = lines[(s.CardId, s.DueDate)]
+                        .Where(x => recurring == null || (x.Tx.RecurringRuleId != null) == recurring)
+                        .OrderBy(x => x.Tx.Date).ThenBy(x => x.Tx.Id)
+                        .Select(x => new CardStatementLineDto(
+                            x.Tx.Id, x.Tx.Date, x.Tx.Description, x.Tx.CategoryId, x.Tx.PersonId, Money.Pesos(x.Impact.Amount),
+                            x.Impact.InstallmentNumber, Math.Max(1, x.Tx.Installments), x.Tx.Status, x.Tx.RecurringRuleId, x.Tx.IsPriorCommitment))
+                        .ToList();
+                    return new CardStatementDto(
+                        s.CardId, cards[s.CardId], s.DueDate, Money.Pesos(s.Modeled), s.Confirmed is { } c ? Money.Pesos(c) : null,
+                        Money.Pesos(s.Paid), Money.Pesos(s.Expected), Money.Pesos(s.Outstanding), -own.Sum(l => l.Amount), own);
+                })
+                .ToList();
+
+            return Results.Ok(new CardStatementsMonthDto(
+                Months.Format(first), result.Sum(r => r.Expected), result.Sum(r => r.FilteredTotal), result));
         });
 
         cards.MapGet("/{id:int}/cycles", async (int id, FinanzasDbContext db) =>

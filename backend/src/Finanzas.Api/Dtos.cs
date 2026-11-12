@@ -49,6 +49,19 @@ public record CardCycleDto(int CardId, string Month, DateOnly ClosingDate, DateO
     public static CardCycleDto From(CardCycle c) => new(c.PaymentMethodId, Months.Format(c.ClosingDate), c.ClosingDate, c.DueDate);
 }
 
+public record CardStatementMonthDto(string DueMonth, decimal Total, decimal Outstanding);
+
+public record CardStatementLineDto(
+    int TransactionId, DateOnly PurchaseDate, string Description, int? CategoryId, int PersonId, decimal Amount,
+    int Installment, int Installments, TransactionStatus Status, int? RecurringRuleId, bool IsPriorCommitment);
+
+/// <summary>Resumen de una tarjeta en un vencimiento. FilteredTotal es lo gastado en las líneas que quedan con el filtro.</summary>
+public record CardStatementDto(
+    int CardId, string Card, DateOnly DueDate, decimal Modeled, decimal? Confirmed, decimal Paid, decimal Expected, decimal Outstanding,
+    decimal FilteredTotal, List<CardStatementLineDto> Lines);
+
+public record CardStatementsMonthDto(string DueMonth, decimal Total, decimal FilteredTotal, List<CardStatementDto> Cards);
+
 public record CardDueDateDto(int CardId, DateOnly PurchaseDate, DateOnly FirstDueDate);
 
 /// <summary>Con IncreasePercent el cambio es un incremento sobre el monto vigente; Amount vuelve calculado y se ignora al guardar.</summary>
