@@ -24,6 +24,11 @@ import { endOfMonth, formatARS, formatDate, monthOf } from '../utils/format';
 
 type Vista = 'lista' | 'caja';
 
+const opcionesFijos = [
+  { key: 'true', value: true, label: 'Solo gastos fijos' },
+  { key: 'false', value: false, label: 'Sin gastos fijos' },
+];
+
 export function MovimientosScreen({ route, navigation }: TabScreenProps<'Movimientos'>) {
   const { scope, cutoff } = useScope();
   const { colors } = useTheme();
@@ -39,13 +44,15 @@ export function MovimientosScreen({ route, navigation }: TabScreenProps<'Movimie
   // Filtros opcionales del listado (vacío = todos); se combinan con el ámbito y el mes.
   const [categoryId, setCategoryId] = useState<Id | undefined>();
   const [paymentMethodId, setPaymentMethodId] = useState<Id | undefined>();
+  // Gastos fijos: true solo los fijos, false sin ellos, undefined todos.
+  const [recurring, setRecurring] = useState<boolean | undefined>();
   // `from` y `to` son inclusivos en el backend.
-  const q = useTransactions({ scope, from: `${month}-01`, to: endOfMonth(month), categoryId, paymentMethodId });
+  const q = useTransactions({ scope, from: `${month}-01`, to: endOfMonth(month), categoryId, paymentMethodId, recurring });
   const categories = useCategories();
   const scopeCategories = useMemo(() => (categories.data ?? []).filter((c) => c.scope === scope), [categories.data, scope]);
   // Las categorías son de un ámbito: al cambiar de ámbito se limpia el filtro.
   useEffect(() => setCategoryId(undefined), [scope]);
-  const filtered = categoryId !== undefined || paymentMethodId !== undefined;
+  const filtered = categoryId !== undefined || paymentMethodId !== undefined || recurring !== undefined;
   const methods = usePaymentMethods();
   const types = useOperationTypes();
   const confirm = useConfirmTransaction();
@@ -159,6 +166,22 @@ export function MovimientosScreen({ route, navigation }: TabScreenProps<'Movimie
                 placeholder="Todas las categorías"
                 clearLabel="Todas las categorías"
                 onClear={() => setCategoryId(undefined)}
+                accent={scopeColor(colors, scope)}
+              />
+            </View>
+          </View>
+          <View style={styles.filters}>
+            <View style={{ flex: 1 }}>
+              <Select
+                title="Gastos fijos"
+                items={opcionesFijos}
+                getKey={(o) => o.key}
+                getLabel={(o) => o.label}
+                selectedKey={recurring === undefined ? undefined : String(recurring)}
+                onSelect={(o) => setRecurring(o.value)}
+                placeholder="Con y sin gastos fijos"
+                clearLabel="Con y sin gastos fijos"
+                onClear={() => setRecurring(undefined)}
                 accent={scopeColor(colors, scope)}
               />
             </View>

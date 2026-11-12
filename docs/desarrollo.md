@@ -40,7 +40,7 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 
 ## Tests
 
-`cd backend && dotnet test` (27 tests).
+`cd backend && dotnet test` (65 tests).
 
 | Archivo | Qué prueba |
 | --- | --- |
@@ -51,6 +51,7 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 | `VigenciaEIncrementosTests.cs` | Gastos fijos con vigencia desde-hasta e incrementos % acumulados: montos por mes, previstos generados por la API y validaciones (primer cambio es un monto y rige desde el inicio, ningún cambio después del hasta, hasta no anterior a desde) |
 | `PresupuestoMesesFuturosTests.cs` | Proyectar presupuesto: fuente presupuesto (con herencia) o real de un mes cerrado, ajuste % único y redondeo a $1.000, fijos con incrementos y vigencia (Fijo/Deuda vs. Variable), guardado de varios meses sin tocar la otra entidad, aviso de herencia y validaciones |
 | `PresupuestoPorEntidadTests.cs` | Presupuesto de Familia y de Memey guardados y reportados por separado, detalle de movimientos de una categoría del presupuesto vs. real (suma igual al real) y filtros del listado por categoría y medio de pago |
+| `ConsumosPorTarjetaTests.cs` | Resúmenes de tarjeta por mes de vencimiento: compra en 6 cuotas con el resto en la primera, cabecera igual a Pagos de tarjeta y pago parcial, vista unificada, filtro de fijos (cambia líneas, no cabecera) con fijo previsto en su resumen, `recurring` en `/transactions`, separación Familia/Memey y validaciones |
 
 La app se valida con `cd mobile && npx tsc --noEmit` (`npm run typecheck`).
 
