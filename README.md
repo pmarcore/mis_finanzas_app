@@ -34,6 +34,11 @@ npm install
 npx expo start
 ```
 
+## En los celulares (Fly.io)
+
+La app está pensada para usarse instalada como PWA en los celulares, con la API en Fly.io y login por persona.
+Puesta en marcha, instalación en Android e iPhone, backups y día a día: [docs/despliegue.md](docs/despliegue.md).
+
 ## Ambiente de pruebas (local)
 
 Requisitos: Docker Desktop abierto (en Windows, con el motor de Linux; el ícono de la ballena tiene que decir "Engine running"). Levanta la API con su propia base, separada de la de desarrollo, y la carga con la foto de octubre.
@@ -41,6 +46,10 @@ Requisitos: Docker Desktop abierto (en Windows, con el motor de Linux; el ícono
 ```bash
 docker compose up -d --build
 ```
+
+La API pide login: el usuario de prueba es `pablo` con contraseña `pruebas` (se cambia en el `.env` de la raíz con
+`USUARIO_1`/`CLAVE_1`, ver [docs/despliegue.md](docs/despliegue.md#ambiente-local)). La app web publicada también queda en
+http://localhost:5080.
 
 Para cargar la foto de octubre (y volver a ese punto cuando quieras empezar de cero):
 
@@ -95,8 +104,7 @@ La pestaña Inversiones lee tu cuenta de Invertir Online por su API oficial, sol
 3. `docker compose up -d --build`.
 
 Ripio no tiene API para cuentas personales: cargá tus cripto en Configuración → Inversiones y la app busca las
-cotizaciones sola. La API de la app no tiene login: cualquiera en tu red Wi-Fi que llegue al puerto 5080 podría ver la
-cartera (no las credenciales).
+cotizaciones sola.
 
 ## Estado
 
@@ -104,6 +112,7 @@ cartera (no las credenciales).
 - Editar o borrar un movimiento rehace sus impactos en caja, así que saldos, resúmenes de tarjeta, proyecciones y presupuesto vs real se recalculan solos.
 - Tipos de operación, categorías y medios de pago se editan desde Configuración (lo que está en uso se desactiva).
 - Dashboard de inversiones con IOL (API, solo lectura) y Ripio (carga manual): rendimientos tal cual los informa IOL, gráficos y señales de concentración, cartera objetivo y plata quieta.
-- App mobile con 18 pantallas; corre en Expo Go y en el navegador.
-- Octubre importado y comparado contra la planilla en los tests (59 tests de backend en CI).
-- Pendiente: login en la API (hoy solo para la red local). Ver `docs/desarrollo.md`.
+- App mobile con 19 pantallas (incluye el login); corre en Expo Go y en el navegador.
+- Login con un usuario por persona, copias diarias de la base y descarga de backup desde Configuración.
+- Lista para desplegar en Fly.io como PWA para Android e iPhone (deploy automático al mergear a `main`).
+- Octubre importado y comparado contra la planilla en los tests (72 tests de backend en CI).

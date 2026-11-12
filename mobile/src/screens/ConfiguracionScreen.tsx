@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { downloadFile } from '../api/client';
 import {
   useCardCycles,
   usePaymentMethods,
@@ -16,10 +17,22 @@ import { ChipPicker } from '../components/ChipPicker';
 import { DateInput, Field, Input } from '../components/Field';
 import { QueryState } from '../components/QueryState';
 import { Screen } from '../components/Screen';
+import { useAuth } from '../state/auth';
+import { Alert } from '../utils/alert';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
 import { addMonths, amountToInput, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
 
-function SaveButton({ onPress, pending, label = 'Guardar' }: { onPress: () => void; pending: boolean; label?: string }) {
+function SaveButton({
+  onPress,
+  pending,
+  label = 'Guardar',
+  pendingLabel = 'Guardando…',
+}: {
+  onPress: () => void;
+  pending: boolean;
+  label?: string;
+  pendingLabel?: string;
+}) {
   const { colors } = useTheme();
   return (
     <Pressable
@@ -27,7 +40,7 @@ function SaveButton({ onPress, pending, label = 'Guardar' }: { onPress: () => vo
       disabled={pending}
       style={[styles.button, { backgroundColor: colors.familia, opacity: pending ? 0.6 : 1 }]}
     >
-      <Text style={{ color: colors.surface, fontWeight: '700' }}>{pending ? 'Guardando…' : label}</Text>
+      <Text style={{ color: colors.surface, fontWeight: '700' }}>{pending ? pendingLabel : label}</Text>
     </Pressable>
   );
 }
@@ -335,6 +348,56 @@ function CatalogosSection() {
   );
 }
 
+/** Sesión (quién está usando la app, cerrar sesión) y copia de la base. */
+function CuentaSection() {
+  const { colors } = useTheme();
+  const { status, user, logout } = useAuth();
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onDownload = async () => {
+    setDownloading(true);
+    setError(null);
+    try {
+      const ok = await downloadFile('/backup/download', 'finanzas.db');
+      if (!ok) Alert.alert('Descargar backup', 'La descarga está disponible en la versión web de la app.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo descargar.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const onLogout = () =>
+    Alert.alert('Cerrar sesión', 'Vas a tener que volver a entrar con tu usuario y contraseña.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Cerrar sesión', style: 'destructive', onPress: () => void logout() },
+    ]);
+
+  return (
+    <Card title="Cuenta y backup">
+      {status === 'signedIn' && user ? (
+        <Text style={{ color: colors.ink }}>
+          Entraste como <Text style={{ fontWeight: '700' }}>{user.displayName}</Text>
+        </Text>
+      ) : (
+        <Text style={{ color: colors.inkMuted }}>Este ambiente no pide login.</Text>
+      )}
+      <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
+        Todas las noches se guarda una copia de la base (las últimas 30). Acá podés bajar una copia de este momento
+        {Platform.OS === 'web' ? '.' : ' (desde la versión web).'}
+      </Text>
+      <SaveButton pending={downloading} onPress={onDownload} label="Descargar backup" pendingLabel="Preparando…" />
+      {error ? <Text style={{ color: colors.bad }}>{error}</Text> : null}
+      {status === 'signedIn' ? (
+        <Pressable onPress={onLogout} hitSlop={8} accessibilityRole="button" style={{ alignSelf: 'center', padding: spacing.sm }}>
+          <Text style={{ color: colors.bad, fontWeight: '600' }}>Cerrar sesión</Text>
+        </Pressable>
+      ) : null}
+    </Card>
+  );
+}
+
 export function ConfiguracionScreen() {
   return (
     <Screen>
@@ -342,6 +405,7 @@ export function ConfiguracionScreen() {
       <UmbralesSection />
       <CajasSection />
       <CiclosSection />
+      <CuentaSection />
     </Screen>
   );
 }

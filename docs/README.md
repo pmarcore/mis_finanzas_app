@@ -10,6 +10,7 @@ Los diagramas están en Mermaid y GitHub los muestra dibujados.
 | [Clases del backend](clases-backend.md) | Proyectos y dependencias, diagramas de clases de entidades, reglas de dominio, infraestructura y API |
 | [App mobile](app-mobile.md) | Componentes, navegación, pantallas y los endpoints que usa cada una |
 | [Tecnologías y versiones](tecnologias.md) | Frameworks, librerías y herramientas con sus versiones |
+| [Despliegue](despliegue.md) | Fly.io, PWA en los celulares, login, secrets, backups y cómo restaurarlos |
 | [Desarrollo, pruebas y CI](desarrollo.md) | Estructura del repo, convenciones, tests, CI, cambios en la base y pendientes conocidos |
 
 Otros documentos del repo:

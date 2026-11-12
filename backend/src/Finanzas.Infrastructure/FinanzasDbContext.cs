@@ -23,10 +23,12 @@ public class FinanzasDbContext(DbContextOptions<FinanzasDbContext> options) : Db
     public DbSet<ManualHolding> ManualHoldings => Set<ManualHolding>();
     public DbSet<InvestmentTarget> InvestmentTargets => Set<InvestmentTarget>();
     public DbSet<InvestmentSettings> InvestmentSettings => Set<InvestmentSettings>();
+    public DbSet<AppUser> Users => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<CashBox>().HasIndex(x => x.Scope).IsUnique();
+        b.Entity<AppUser>().HasIndex(x => x.Username).IsUnique();
 
         b.Entity<PaymentMethod>().HasMany(x => x.Cycles).WithOne().HasForeignKey(c => c.PaymentMethodId);
         b.Entity<PaymentMethod>().Ignore(x => x.IsCard);

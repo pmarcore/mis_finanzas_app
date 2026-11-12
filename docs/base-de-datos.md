@@ -280,6 +280,12 @@ apertura: los impactos anteriores a la apertura no cuentan.
 `InvestmentValuations`: valor de mercado de las inversiones por ámbito y fecha, con el proveedor que lo informó
 (índice por `Scope, Date`). El dashboard deja una por día para Familia.
 
+### Users (login)
+
+Un usuario por persona: `Username` (único, en minúsculas), `DisplayName`, `PasswordHash` (hash de ASP.NET Core
+Identity, nunca la contraseña) y `TokenVersion`, que sube al cambiar la contraseña e invalida los tokens anteriores. No
+se editan desde la app: la API los crea y actualiza al arrancar desde `Auth:Users` (ver [despliegue.md](despliegue.md)).
+
 ### Inversiones (dashboard)
 
 - `InvestmentSnapshots`: foto diaria por activo (IOL y Ripio), con las cifras del broker en la moneda del activo y el valor
@@ -332,6 +338,7 @@ En `backend/src/Finanzas.Infrastructure/Migrations/`:
 | `20261008194003_CategoryUniqueName` | Nombre de categoría único por ámbito. |
 | `20261012014247_TiposDeOperacionAhorroInversion` | Tabla `OperationTypes`: la columna `Operation` (enum) de movimientos y gastos fijos pasa a ser `OperationTypeId` con FK. Agrega `Active` en categorías y medios de pago, y la tabla `InvestmentValuations`. |
 | `20261021141201_DashboardInversiones` | Tablas `InvestmentSnapshots`, `ManualHoldings`, `InvestmentTargets` e `InvestmentSettings` (con su fila sembrada). |
+| `20261112160723_UsuariosYLogin` | Tabla `Users` con índice único por `Username`. |
 | `20261019213123_IncrementoPorcentualEnFijos` | Columna `IncreasePercent` (nullable) en `RecurringRuleAmounts` para los incrementos % previstos de los gastos fijos. Las filas existentes quedan como montos fijos. |
 
 Para crear una nueva (desde `backend/`):

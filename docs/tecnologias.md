@@ -15,6 +15,7 @@ dependencia, actualizar también esta tabla.
 | Microsoft.EntityFrameworkCore.Sqlite | 10.0.12 | Proveedor SQLite | `Finanzas.Infrastructure.csproj` |
 | Microsoft.EntityFrameworkCore.Design | 10.0.12 | Herramientas de diseño para migraciones (solo desarrollo) | `Finanzas.Api.csproj`, `Finanzas.Infrastructure.csproj` |
 | dotnet-ef | 10.0.12 | CLI de migraciones (`dotnet tool restore`) | `backend/dotnet-tools.json` |
+| Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.12 | Tokens de sesión (JWT) del login | `Finanzas.Api.csproj` |
 | System.Text.Json | incluido en .NET 10 | JSON con enums en camelCase (`JsonStringEnumConverter`) | `Program.cs` |
 | SQLite | la que trae el proveedor de EF Core | Base de datos en un archivo | — |
 
@@ -50,6 +51,7 @@ Versión declarada en `package.json` y versión instalada según `package-lock.j
 | react-native-screens | ~4.26.0 | 4.26.2 | Pantallas nativas para la navegación |
 | react-native-safe-area-context | ~5.7.0 | 5.7.0 | Márgenes seguros (notch, barra de estado) |
 | @tanstack/react-query | ^5.104.1 | 5.104.1 | Caché y sincronización de datos de la API |
+| expo-secure-store | ~57.0.0 | Guardar la sesión en el almacenamiento seguro del celular (en web se usa el navegador) | `mobile/package.json` |
 | expo-constants | ~57.0.21 | 57.0.21 | Leer el host de Expo para detectar la URL de la API |
 | expo-font | ~57.0.4 | 57.0.4 | Fuentes (íconos) |
 | expo-status-bar | ~57.0.1 | 57.0.1 | Barra de estado |
@@ -63,8 +65,10 @@ Las dependencias se agregan con `npx expo install <paquete>` para que coincidan 
 
 | Herramienta | Versión | Para qué | Dónde |
 | --- | --- | --- | --- |
+| Docker (imagen de la web) | `node:22-bookworm-slim` | Exportar la app Expo para web (PWA), que sirve la API | `backend/Dockerfile` |
 | Docker (imagen de build) | `mcr.microsoft.com/dotnet/sdk:10.0` | Compilar y publicar la API | `backend/Dockerfile` |
 | Docker (imagen de runtime) | `mcr.microsoft.com/dotnet/aspnet:10.0` | Correr la API en el puerto 8080 | `backend/Dockerfile` |
+| Fly.io | `flyctl`, `superfly/flyctl-actions/setup-flyctl` | Hosting de la API + web con volumen para SQLite; deploy automático al mergear a `main` | `fly.toml`, `.github/workflows/deploy.yml` |
 | Docker Compose | — | Ambiente de pruebas: `api` (5080) y `db-admin` (8090) con el volumen `finanzas-pruebas` | `docker-compose.yml` |
 | sqlite-web | `ghcr.io/coleifer/sqlite-web:latest` | Admin web de la base, solo en `127.0.0.1:8090` | `docker-compose.yml` |
 | GitHub Actions | `actions/checkout@v4`, `actions/setup-dotnet@v4` (10.0.x), `actions/setup-node@v4` (Node 22) | CI: tests del backend, `tsc` de la app y build de la imagen Docker | `.github/workflows/ci.yml` |

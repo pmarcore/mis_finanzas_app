@@ -40,7 +40,7 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 
 ## Tests
 
-`cd backend && dotnet test` (65 tests).
+`cd backend && dotnet test` (72 tests).
 
 | Archivo | Qué prueba |
 | --- | --- |
@@ -51,6 +51,7 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 | `VigenciaEIncrementosTests.cs` | Gastos fijos con vigencia desde-hasta e incrementos % acumulados: montos por mes, previstos generados por la API y validaciones (primer cambio es un monto y rige desde el inicio, ningún cambio después del hasta, hasta no anterior a desde) |
 | `PresupuestoMesesFuturosTests.cs` | Proyectar presupuesto: fuente presupuesto (con herencia) o real de un mes cerrado, ajuste % único y redondeo a $1.000, fijos con incrementos y vigencia (Fijo/Deuda vs. Variable), guardado de varios meses sin tocar la otra entidad, aviso de herencia y validaciones |
 | `PresupuestoPorEntidadTests.cs` | Presupuesto de Familia y de Memey guardados y reportados por separado, detalle de movimientos de una categoría del presupuesto vs. real (suma igual al real) y filtros del listado por categoría y medio de pago |
+| `LoginYBackupTests.cs` | Login con usuarios de la configuración: rutas protegidas salvo `/health` y `/auth/login`, usuario sin mayúsculas, contraseña incorrecta, límite de 5 intentos por minuto, token vencido, cambio de contraseña que cierra solo las sesiones de ese usuario, copia diaria (una por día, guarda las últimas N) y descarga del backup |
 | `ConsumosPorTarjetaTests.cs` | Resúmenes de tarjeta por mes de vencimiento: compra en 6 cuotas con el resto en la primera, cabecera igual a Pagos de tarjeta y pago parcial, vista unificada, filtro de fijos (cambia líneas, no cabecera) con fijo previsto en su resumen, `recurring` en `/transactions`, separación Familia/Memey y validaciones |
 
 La app se valida con `cd mobile && npx tsc --noEmit` (`npm run typecheck`).
@@ -61,7 +62,10 @@ La app se valida con `cd mobile && npx tsc --noEmit` (`npm run typecheck`).
 
 1. **backend:** `dotnet test` con .NET 10.
 2. **mobile:** `npm ci` y `npx tsc --noEmit` con Node 22.
-3. **docker:** `docker build` de la imagen de la API.
+3. **docker:** `docker build -f backend/Dockerfile .` de la imagen (API + app web).
+
+`.github/workflows/deploy.yml` corre en cada push a `main`: tests y, si pasan y existe el secret `FLY_API_TOKEN`,
+`flyctl deploy` a Fly.io (ver [despliegue.md](despliegue.md)).
 
 ## Cambios en la base
 
@@ -72,8 +76,7 @@ La app se valida con `cd mobile && npx tsc --noEmit` (`npm run typecheck`).
 
 ## Pendientes conocidos
 
-- **Autenticación:** la API no tiene login y el CORS está abierto. El cliente ya manda un token bearer si se le
-  configura (`setAuthToken`). Antes de publicar la API fuera de la red local hay que agregar autenticación.
+- **Quién cargó cada movimiento:** hay usuarios, pero los movimientos todavía no guardan quién los cargó.
 - **Ripio:** sin API para cuentas personales; las tenencias se cargan a mano (ver
   [arquitectura.md](arquitectura.md#inversiones-e-invertir-online)).
 - **Resúmenes reales de tarjeta:** `Statements.ConfirmedAmount` solo se carga por importación; no hay endpoint para

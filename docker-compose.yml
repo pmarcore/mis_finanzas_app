@@ -3,9 +3,14 @@
 #   ./scripts/seed-pruebas.sh            # carga la foto de octubre (borra lo que haya)
 # Admin de la base (ver y editar tablas): http://localhost:8090, solo desde esta PC.
 # Inversiones: IOL_USERNAME e IOL_PASSWORD van en el archivo .env de esta carpeta (no se sube al repo, ver README).
+# Login: por defecto usuario "pablo" con contraseña "pruebas". Se cambian (y se suma un segundo usuario) en el .env:
+#   USUARIO_1, CLAVE_1, NOMBRE_1, USUARIO_2, CLAVE_2, NOMBRE_2.
+# La app web también queda en http://localhost:5080 (la misma imagen que se despliega en Fly.io).
 services:
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "5080:8080"
     volumes:
@@ -13,6 +18,13 @@ services:
     environment:
       Iol__Username: ${IOL_USERNAME:-}
       Iol__Password: ${IOL_PASSWORD:-}
+      Auth__SigningKey: ${AUTH_SIGNING_KEY:-clave-local-de-pruebas-no-usar-en-la-nube-0123456789}
+      Auth__Users__0__Username: ${USUARIO_1:-pablo}
+      Auth__Users__0__Password: ${CLAVE_1:-pruebas}
+      Auth__Users__0__DisplayName: ${NOMBRE_1:-Pablo}
+      Auth__Users__1__Username: ${USUARIO_2:-}
+      Auth__Users__1__Password: ${CLAVE_2:-}
+      Auth__Users__1__DisplayName: ${NOMBRE_2:-}
     restart: unless-stopped
 
   db-admin:

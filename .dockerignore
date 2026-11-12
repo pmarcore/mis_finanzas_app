@@ -1,0 +1,15 @@
+.git
+.github
+**/bin
+**/obj
+**/node_modules
+**/.expo
+**/dist
+**/web-build
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/TestResults
+.env
+**/.env
+capturas

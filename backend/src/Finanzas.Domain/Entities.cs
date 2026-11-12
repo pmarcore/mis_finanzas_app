@@ -278,3 +278,17 @@ public class InvestmentSettings
     /// <summary>Activos a seguir separados por coma: "GGAL", "nyse:SPY" o "cripto:BTC". Sin mercado se asume bcba.</summary>
     public string WatchList { get; set; } = "GGAL,nyse:SPY,cripto:BTC";
 }
+
+/// <summary>
+/// Usuario que puede entrar a la app (uno por persona). No hay registro abierto: se crean y actualizan al arrancar
+/// la API desde la configuración (Auth:Users). La contraseña se guarda solo como hash.
+/// </summary>
+public class AppUser
+{
+    public int Id { get; set; }
+    public required string Username { get; set; }
+    public required string DisplayName { get; set; }
+    public required string PasswordHash { get; set; }
+    /// <summary>Sube cada vez que cambia la contraseña: invalida los tokens emitidos antes (cierra las sesiones abiertas).</summary>
+    public int TokenVersion { get; set; } = 1;
+}

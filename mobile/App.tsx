@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { LoadingScreen, LoginScreen } from './src/screens/LoginScreen';
+import { AuthProvider, useAuth } from './src/state/auth';
 import { ScopeProvider } from './src/state/scope';
 import { useTheme } from './src/theme';
 
@@ -13,6 +15,20 @@ function makeQueryClient() {
       queries: { staleTime: 30_000, retry: 1 },
     },
   });
+}
+
+/** Login si hace falta; si no, la app de siempre. */
+function Gate({ navTheme }: { navTheme: Theme }) {
+  const { status } = useAuth();
+  if (status === 'loading') return <LoadingScreen />;
+  if (status === 'signedOut') return <LoginScreen />;
+  return (
+    <ScopeProvider>
+      <NavigationContainer theme={navTheme}>
+        <RootNavigator />
+      </NavigationContainer>
+    </ScopeProvider>
+  );
 }
 
 export default function App() {
@@ -35,11 +51,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
-        <ScopeProvider>
-          <NavigationContainer theme={navTheme}>
-            <RootNavigator />
-          </NavigationContainer>
-        </ScopeProvider>
+        <AuthProvider>
+          <Gate navTheme={navTheme} />
+        </AuthProvider>
       </QueryClientProvider>
       <StatusBar style={dark ? 'light' : 'dark'} />
     </SafeAreaProvider>

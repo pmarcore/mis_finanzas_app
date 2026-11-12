@@ -1,0 +1,40 @@
+# Despliegue en Fly.io (ver docs/despliegue.md). Una sola máquina chica en São Paulo con un disco para SQLite.
+# Si el nombre ya está tomado en Fly, cambiarlo acá y en el comando fly apps create.
+app = "mis-finanzas-pablo"
+primary_region = "gru"
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[env]
+  # La app web se sirve desde la misma API: no hace falta CORS.
+  Cors__AllowAny = "false"
+  # GC de estación de trabajo: menos memoria, alcanza y sobra para dos usuarios.
+  DOTNET_gcServer = "0"
+  # Secrets (fly secrets set, nunca en el repo): AUTH__SIGNINGKEY, AUTH__USERS__0__USERNAME/PASSWORD/DISPLAYNAME,
+  # AUTH__USERS__1__..., IOL__USERNAME, IOL__PASSWORD.
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Se apaga cuando nadie la usa y se prende con el primer pedido (1 o 2 segundos). Baja el costo.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[mounts]]
+  source = "finanzas_data"
+  destination = "/data"
+  # Snapshots diarios del disco que guarda Fly.
+  snapshot_retention = 5
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

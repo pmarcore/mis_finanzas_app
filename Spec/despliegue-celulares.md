@@ -1,6 +1,6 @@
 # Spec: desplegar la app en los celulares
 
-Estado: **borrador, esperando aprobación de Pablo**.
+Estado: **aprobada** (PR 21, 2026-11-12). Preguntas resueltas con lo recomendado: Fly.io, login por persona (sin registrar quién cargó cada movimiento por ahora), PWA; subir la base de la PC queda como paso opcional de Pablo.
 Pedido: Pablo, 2026-11-12 (hilo "Desplegar la app en los celulares")
 
 > "¿Cómo podemos deployarla para que mi mujer y yo la tengamos instalada en el celular?"

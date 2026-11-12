@@ -79,15 +79,19 @@ Un previsto generado por un gasto fijo conserva el vínculo con su regla al edit
 El dashboard (`GET /dashboard`) recorre el camino inverso: carga movimientos con sus impactos, cajas, resúmenes,
 presupuestos y gastos fijos, y `CashFlowCalculator` calcula caja al corte, fin de mes, trimestral y pagos de tarjeta.
 
-## Despliegue (ambiente de pruebas)
+## Despliegue
 
-Corre en la PC de Pablo con Docker Desktop; no hay nada en la nube.
+En la nube corre en Fly.io y los celulares usan la app web instalada (PWA): ver [despliegue.md](despliegue.md).
+
+### Ambiente de pruebas local
+
+Corre en la PC de Pablo con Docker Desktop, con la misma imagen que Fly.
 
 ```mermaid
 flowchart LR
   subgraph PC["PC (Docker Desktop)"]
     subgraph Compose["docker compose"]
-      A["api<br/>imagen backend/Dockerfile<br/>:8080 → 5080"]
+      A["api<br/>imagen backend/Dockerfile (API + web)<br/>:8080 → 5080"]
       ADM["db-admin<br/>sqlite-web<br/>127.0.0.1:8090"]
       V[("volumen finanzas-pruebas<br/>/data/finanzas.db")]
       A --- V
@@ -103,10 +107,10 @@ flowchart LR
   CEL -->|HTTP IP-de-la-PC:5080| A
 ```
 
-- La app toma la URL de la API de `EXPO_PUBLIC_API_URL` o, si no está, del host que sirve Expo, puerto 5080
-  (`mobile/src/api/client.ts`).
-- La API no tiene login y el CORS está abierto: solo debe exponerse en la red local. El admin de la base escucha solo en
-  `127.0.0.1`.
+- La app toma la URL de la API de `EXPO_PUBLIC_API_URL`; si no está, la web publicada usa su mismo sitio y la de
+  desarrollo el host que sirve Expo, puerto 5080 (`mobile/src/api/client.ts`).
+- La API pide login (usuario de prueba `pablo` / `pruebas`). El CORS está abierto solo en local para Expo web; en Fly
+  se apaga. El admin de la base escucha solo en `127.0.0.1` y no se publica en la nube.
 - `scripts/seed-pruebas.sh` (o `.ps1` en Windows) carga la foto de octubre de la planilla en la base de pruebas.
 
 ## Reglas que implementa `Finanzas.Domain`
@@ -140,7 +144,10 @@ Montos en pesos, fechas `yyyy-MM-dd`, meses `yyyy-MM`, enums en camelCase (`fami
 
 | Método y ruta | Para qué |
 | --- | --- |
-| `GET /health` | Chequeo de vida |
+| `GET /health` | Chequeo de vida (sin login) |
+| `POST /auth/login` | Usuario y contraseña → token de 90 días (sin login; 5 intentos por minuto por IP) |
+| `GET /auth/me` | Usuario de la sesión (`{ required: false }` si la API no pide login) |
+| `GET /backup/download` | Copia de la base SQLite al momento |
 | `GET /openapi/v1.json` | Especificación OpenAPI generada |
 | `GET /dashboard?scope&date` | Caja al corte (hoy por defecto), fin de mes, trimestral, gasto estimado de meses futuros, Memey, pagos de tarjeta por mes |
 | `GET /cashflow?scope&date&until` | Flujo de caja del mes del corte con saldo acumulado: cierra en la caja actual y en la de fin de mes |
