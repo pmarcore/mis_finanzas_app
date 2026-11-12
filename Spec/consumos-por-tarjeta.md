@@ -77,7 +77,7 @@ Montos en pesos, igual que el resto de la API. Devuelve 400 si el mes no es vál
 
 ## Preguntas para Pablo (con mi recomendación)
 
-1. **¿Detalle por resumen (mes de vencimiento) o por mes de compra?** Recomiendo **por resumen**: es lo que se paga y coincide con Pagos de tarjeta. Por mes de compra ya se puede ver en Movimientos filtrando por medio de pago.
+1. **¿Detalle por resumen (mes de vencimiento) o por mes de compra?** **Resuelta: por resumen** (Pablo, 2026-11-12). Por mes de compra ya se puede ver en Movimientos filtrando por medio de pago.
 2. **¿Una pantalla nueva o la de Tarjetas?** Recomiendo **ampliar Tarjetas**, que ya está enlazada desde el inicio, en lugar de sumar otra pantalla.
 3. **¿Agrego también "Solo gastos fijos" en Movimientos?** Recomiendo **sí**: es un cambio chico y sirve para ver todos los fijos, no solo los de tarjeta.
 4. **¿El filtro de fijos debe mostrar también la lista de gastos fijos configurados con tarjeta (aunque todavía no tengan línea en ese resumen)?** Recomiendo **no por ahora**: las líneas del resumen ya muestran los fijos de ese mes, y la lista completa está en Configuración → Fijos. Si querés, agrego un enlace "Editar fijos" en el filtro.
