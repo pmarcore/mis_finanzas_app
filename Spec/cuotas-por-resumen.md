@@ -40,36 +40,40 @@ Hay dos defectos combinados:
 
 ## Objetivo
 
-Que una cuota pertenezca a **un resumen (tarjeta + mes)** y que la fecha de vencimiento de ese resumen salga siempre de los cierres cargados. Corregir un cierre mueve automáticamente todas las cuotas, los fijos y los pagos de ese resumen, y nunca puede haber dos resúmenes de la misma tarjeta en el mismo mes.
+Que una cuota pertenezca a **un resumen (tarjeta + mes)** y que la fecha de vencimiento de ese resumen salga siempre de los cierres cargados. Que el resumen de cada compra salga siempre de **su fecha de compra comparada con los cierres cargados**. Corregir un cierre (fecha de cierre o de vencimiento) deja todo consistente sin tocar nada a mano: las compras que quedan del otro lado del cierre pasan al resumen que corresponde, con todas sus cuotas, y nunca puede haber dos resúmenes de la misma tarjeta en el mismo mes.
 
 ## Reglas
 
 1. **El resumen se identifica por tarjeta y mes de vencimiento** (`AAAA-MM`), no por fecha. Una tarjeta tiene a lo sumo un resumen por mes.
-2. **Cada compra con tarjeta guarda el mes de su primer resumen** (nuevo `Transaction.FirstStatementMonth`). Se propone como hoy, con el primer cierre igual o posterior a la fecha de compra, y se puede cambiar a mano.
+2. **El primer resumen de una compra sale de su fecha de compra**: es el del primer cierre igual o posterior a esa fecha. Se guarda en el nuevo `Transaction.FirstStatementMonth` y se **recalcula** cada vez que cambian los cierres de esa tarjeta o la fecha de la compra. Ejemplo: compra del 29/12 con cierre de diciembre el 29/12 va al resumen de enero; si después se corrige el cierre a 28/12, pasa sola al resumen de febrero, con todas sus cuotas corridas un mes.
 3. **La cuota *i* va al resumen del mes `primer resumen + (i-1)`.** Cada línea de resumen guarda ese mes (nuevo `CashImpact.StatementMonth`).
 4. **La fecha de vencimiento de un resumen sale del cierre cargado para ese mes.** Si todavía no hay cierre cargado para ese mes (cuotas lejanas), se usa el mismo día del último vencimiento cargado de esa tarjeta, y se ajusta solo cuando se carga el cierre.
-5. **Al guardar los cierres de una tarjeta se actualiza la fecha de todas sus líneas de resumen** según la regla 4 (compras, importadas, compromisos previos, fijos realizados y previstos). El mes de cada línea no cambia. La fecha guardada en `CashImpact.ImpactDate` queda como copia de la fecha del resumen, para que caja al corte, flujo de caja y proyecciones sigan funcionando igual.
-6. **Cambiar un cierre no cambia a qué resumen pertenece una compra ya cargada.** Si se corrige la fecha de cierre y una compra queda del otro lado, se corrige editando esa compra (combo "Primer resumen"). Es lo que pasa en la realidad: el banco ya la asignó a un resumen.
+5. **Al guardar los cierres de una tarjeta se recalculan todas sus compras**: primero el primer resumen de cada compra (regla 2) y con él el mes de cada cuota (regla 3); después la fecha de cada línea (regla 4). Alcanza a compras realizadas y previstas, cuotas y fijos. La fecha guardada en `CashImpact.ImpactDate` queda como copia de la fecha del resumen, para que caja al corte, flujo de caja y proyecciones sigan funcionando igual.
+6. **Excepciones que no se recalculan:** las compras importadas de la planilla y los compromisos anteriores a la apertura (su fecha de compra en la base no es la real, por ejemplo 30/09 para todas las importadas), y las compras con el resumen **fijado a mano** (ver regla 9). Para esas solo se actualiza la fecha (regla 4), no el mes.
 7. **El pago de tarjeta y el resumen real confirmado también se atan al mes**: el pago guarda la tarjeta y el mes del resumen que paga; el resumen confirmado (`Statement`) se identifica por tarjeta y mes. La fecha del pago sigue siendo la fecha en que sale la plata.
-8. **Los gastos fijos con tarjeta** siguen generando un previsto por mes; su primer resumen se propone con la regla 2 y se regeneran como hoy.
+8. **Los gastos fijos con tarjeta** siguen generando un previsto por mes; su primer resumen sale de la regla 2 y se regeneran como hoy.
+9. **Resumen fijado a mano (opcional):** si el banco puso una compra en otro resumen del que le toca por fecha (por ejemplo, un comercio que la presentó tarde), en el formulario se puede elegir el resumen y queda marcada como "fijada a mano" (nuevo `Transaction.StatementPinned`). Esa compra ya no se recalcula al cambiar cierres. Volver a "automático" la recalcula.
+10. **Si la fecha de compra no tiene cierre cargado** (todavía no se cargó ese mes), se mantiene el resumen que tenía y se recalcula cuando se cargue el cierre. Una compra nueva en esa situación sigue dando el aviso de hoy ("Falta cargar el cierre...").
 
 ## Cambios
 
 ### Backend
 
-- `Transaction`: nuevo `FirstStatementMonth` (primer día del mes). `FirstDueDate` deja de ser la fuente de verdad: en compras se devuelve calculado (vencimiento del primer resumen) para no romper la app; en pagos de tarjeta se reemplaza por el mes que paga.
+- `Transaction`: nuevos `FirstStatementMonth` (primer día del mes) y `StatementPinned` (bool, regla 9). `FirstDueDate` deja de ser la fuente de verdad: en compras se devuelve calculado (vencimiento del primer resumen) para no romper la app; en pagos de tarjeta se reemplaza por el mes que paga.
 - `CashImpact`: nuevo `StatementMonth` en líneas de tarjeta.
 - `Statement`: el índice único pasa a (tarjeta, mes).
 - `CardCalendar`: `ProposeStatementMonth(cycles, purchaseDate)` y `DueDateFor(cycles, month)` (regla 4).
 - `CashImpactBuilder.Build`: arma las cuotas por mes (regla 3) y les pone la fecha con `DueDateFor`.
 - `CashFlowCalculator.StatementSummaries`: agrupa por (tarjeta, mes); la fecha que muestra es la del cierre de ese mes.
-- `PUT /cards/{id}/cycles`: además de regenerar fijos, actualiza `ImpactDate` de todas las líneas de esa tarjeta (regla 5).
+- `PUT /cards/{id}/cycles`: además de regenerar fijos, recalcula el primer resumen de las compras de esa tarjeta, rearma sus cuotas y actualiza las fechas (regla 5). Devuelve cuántas compras cambiaron de resumen, y la app lo muestra ("3 compras pasaron al resumen de febrero").
+- Editar la fecha de una compra con tarjeta también recalcula su resumen (salvo fijada a mano).
 - API de movimientos: acepta `firstStatementMonth` (`"2026-12"`); si llega solo `firstDueDate` (app vieja, script de conciliación), se toma su mes. `GET /cards/{id}/due-date` devuelve mes y fecha.
 - `GET /cards/statements/{dueMonth}` deja de poder devolver dos resúmenes de la misma tarjeta en un mes.
 
 ### App
 
-- Formulario de movimiento con tarjeta: el campo de vencimiento pasa a ser un combo **"Primer resumen"** con los meses (ej. "Diciembre 2026, vence 04/12"), propuesto solo.
+- Formulario de movimiento con tarjeta: el campo de vencimiento pasa a mostrar el **"Primer resumen"** calculado por fecha (ej. "Diciembre 2026, vence 04/12"). Con "Elegir a mano" aparece el combo de meses y la compra queda fijada (regla 9).
+- Configuración, cierres: al guardar se avisa cuántas compras cambiaron de resumen.
 - Pago de tarjeta: combo **"Resumen que paga"** por mes.
 - Tarjetas: un solo bloque por tarjeta y mes, con la fecha del cierre cargado.
 
@@ -80,10 +84,11 @@ Se hace sola con una migración, sin trabajo manual de Pablo:
 1. Para cada línea de tarjeta existente: `StatementMonth` = mes de su `ImpactDate` actual. Las cuotas al 11/12 quedan en el resumen de **diciembre**, igual que las de 04/12.
 2. Para cada compra con tarjeta: `FirstStatementMonth` = mes de su `FirstDueDate`.
 3. Para cada pago de tarjeta: mes del resumen que paga = mes de su `FirstDueDate`.
-4. Se recalcula `ImpactDate` de todas las líneas con los cierres cargados (regla 4). Diciembre de Visa Santander queda en un solo resumen al 04/12 con las 17 líneas; Visa Galicia al 04/12 y Mercado Pago al 10/12. Las cuotas de enero de las compras cargadas hoy pasan de 04/01 a 11/01.
-5. `Statement`: se pasa a (tarjeta, mes). Si hubiera dos del mismo mes, se queda el de mayor monto confirmado y se informa en el log.
+4. Se recalcula el primer resumen de las compras **cargadas en la app** con su fecha de compra y los cierres actuales (regla 2), salvo importadas y compromisos previos (regla 6). Antes de aplicar se lista cuáles cambiarían de mes, para que Pablo lo vea sobre la copia de su base; se espera que ninguna o casi ninguna, porque se cargaron con los cierres ya corregidos.
+5. Se recalcula `ImpactDate` de todas las líneas con los cierres cargados (regla 4). Diciembre de Visa Santander queda en un solo resumen al 04/12 con las 17 líneas; Visa Galicia al 04/12 y Mercado Pago al 10/12. Las cuotas de enero de las compras cargadas hoy pasan de 04/01 a 11/01.
+6. `Statement`: se pasa a (tarjeta, mes). Si hubiera dos del mismo mes, se queda el de mayor monto confirmado y se informa en el log.
 
-Se prueba primero contra una copia de la base local de Pablo y se compara el total por tarjeta y mes antes y después: **los totales mensuales no cambian**, solo se unifican los resúmenes y se corrigen las fechas. La caja proyectada sí puede moverse unos días dentro del mes (ej. lo que vencía el 11/12 ahora sale el 04/12), que es lo correcto.
+Se prueba primero contra una copia de la base local de Pablo y se compara el total por tarjeta y mes antes y después: **los totales mensuales no cambian** salvo por las compras que el paso 4 mueva de mes (si las hay, se listan); se unifican los resúmenes y se corrigen las fechas. La caja proyectada sí puede moverse unos días dentro del mes (ej. lo que vencía el 11/12 ahora sale el 04/12), que es lo correcto.
 
 La base de Fly todavía no está creada, así que la migración corre en la local y la nube arranca ya con el modelo nuevo.
 
@@ -92,15 +97,20 @@ La base de Fly todavía no está creada, así que la migración corre en la loca
 - Compra en 3 cuotas con cierres de vencimiento distinto cada mes (04/12, 11/01, 09/02): cada cuota cae en la fecha de su mes.
 - Cambiar el vencimiento de diciembre de 11/12 a 04/12 mueve compras, importadas y fijos; queda un solo resumen.
 - Cuota en un mes sin cierre cargado: usa el día del último vencimiento; al cargar el cierre se corrige.
+- Compra del 29/12 con cierre 29/12 va a enero; al cambiar el cierre a 28/12 pasa a febrero con todas sus cuotas. Volver a 29/12 la devuelve a enero.
+- Compra fijada a mano no se mueve al cambiar cierres; importadas y compromisos previos tampoco cambian de mes.
+- Cambiar la fecha de una compra la pasa al resumen que corresponde.
 - Pago y resumen confirmado se encuentran por mes aunque la fecha difiera.
 - Migración sobre una base con el caso real (cuotas 11/12 y fijos 04/12): un solo resumen, mismo total.
 - Las pruebas actuales (65) siguen pasando.
 
 ## Fuera de alcance
 
-- Reasignar automáticamente compras a otro resumen cuando se corrige una fecha de cierre (regla 6). Si se quiere, se puede sumar después como opción.
+- Mover pagos de tarjeta ya cargados: un pago sigue atado al mes del resumen que se eligió al cargarlo.
 
 ## Preguntas para Pablo
 
-1. **Regla 6:** ¿está bien que corregir un cierre solo mueva fechas y no cambie a qué resumen pertenece una compra ya cargada? Recomendado: sí.
-2. **Regla 4:** para cuotas en meses sin cierre cargado, ¿usar el día del último vencimiento cargado? (Alternativa: un día fijo por tarjeta en Medios de pago.) Recomendado: último vencimiento cargado.
+1. **Regla 4:** para cuotas en meses sin cierre cargado, ¿usar el día del último vencimiento cargado? (Alternativa: un día fijo por tarjeta en Medios de pago.) Recomendado: último vencimiento cargado.
+2. **Regla 9:** ¿querés la opción de fijar a mano el resumen de una compra, para los casos en que el banco no respeta la fecha? Recomendado: sí; sin ella, esos casos solo se arreglan cambiando la fecha de compra.
+
+Resuelto por Pablo (2026-11-16): al cambiar una fecha de cierre, las compras se reasignan al resumen que corresponde según su fecha de compra (antes figuraba como fuera de alcance).
