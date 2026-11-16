@@ -46,6 +46,8 @@ public class ConsumosPorTarjetaTests : IClassFixture<PlanillaOctubreTests.Api>
         {
             scope, personId = 1, operationTypeId = await TypeId(c, "movimiento"), date = "2026-11-01", description,
             categoryId = await CategoryId(c, scope), amount, paymentMethodId = card, installments, firstDueDate = firstDue,
+            // La fecha de compra es de 2026 y el resumen de 2027: el resumen va fijado a mano.
+            statementPinned = true,
         }));
         return t.GetProperty("id").GetInt32();
     }
@@ -53,10 +55,13 @@ public class ConsumosPorTarjetaTests : IClassFixture<PlanillaOctubreTests.Api>
     static Task<JsonElement> Detalle(HttpClient c, string month, string query = "") =>
         c.GetAsync($"/cards/statements/{month}?scope=familia{query}").ContinueWith(r => Json(r.Result)).Unwrap();
 
-    /// <summary>Resumen de una tarjeta en el mes; una tarjeta puede tener dos vencimientos en el mismo mes, por eso el filtro opcional.</summary>
-    static JsonElement CardOf(JsonElement detalle, int card, string? due = null) =>
-        detalle.GetProperty("cards").EnumerateArray()
-            .Single(x => x.GetProperty("cardId").GetInt32() == card && (due == null || x.GetProperty("dueDate").GetString() == due));
+    /// <summary>Resumen de una tarjeta en el mes: hay uno solo por tarjeta y mes, venza el día que venza.</summary>
+    static JsonElement CardOf(JsonElement detalle, int card, string? due = null)
+    {
+        var s = detalle.GetProperty("cards").EnumerateArray().Single(x => x.GetProperty("cardId").GetInt32() == card);
+        if (due is not null) Assert.StartsWith(due[..7], s.GetProperty("dueDate").GetString());
+        return s;
+    }
 
     static IEnumerable<JsonElement> Lines(JsonElement card) => card.GetProperty("lines").EnumerateArray();
 

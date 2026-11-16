@@ -140,6 +140,8 @@ classDiagram
         +int PaymentMethodId
         +int Installments
         +DateOnly FirstDueDate [nullable]
+        +DateOnly FirstStatementMonth [nullable]
+        +bool StatementPinned
         +TransactionStatus Status
         +int RecurringRuleId [nullable]
         +int PaidCardId [nullable]
@@ -153,6 +155,7 @@ classDiagram
         +int CashBoxId
         +int CardId [nullable]
         +DateOnly ImpactDate
+        +DateOnly StatementMonth [nullable]
         +long Amount
         +int InstallmentNumber
     }
@@ -226,6 +229,8 @@ classDiagram
     class CardCalendar {
         <<static>>
         +ProposeDueDate(cycles, purchaseDate) DateOnly?
+        +ProposeStatementMonth(cycles, purchaseDate) DateOnly?
+        +DueDateFor(cycles, month, fallbackDay) DateOnly
     }
     class CashImpactBuilder {
         <<static>>
@@ -327,8 +332,8 @@ classDiagram
 
 | Clase | Responsabilidad |
 | --- | --- |
-| `CardCalendar` | Vencimiento del primer cierre igual o posterior a la compra (null si falta cargar el cierre). |
-| `CashImpactBuilder` | Convierte un movimiento en impactos de caja: uno directo, uno por cuota con tarjeta, o dos en una transferencia. |
+| `CardCalendar` | Resumen (mes) de una compra según su fecha y los cierres (null si falta cargar el cierre) y vencimiento del resumen de un mes (el cargado, o el día del último vencimiento si el mes no tiene cierre). |
+| `CashImpactBuilder` | Convierte un movimiento en impactos de caja: uno directo, uno por cuota con tarjeta (cada una en el resumen de su mes, con el vencimiento cargado para ese mes), o dos en una transferencia. |
 | `RecurringRuleExpander` | Monto vigente de un gasto fijo en un mes y los movimientos previstos mes a mes. |
 | `CashFlowCalculator` | Caja al corte, proyección a una fecha, flujo de caja con saldo acumulado y resúmenes de tarjeta pendientes (el mayor entre modelado, real y pago previsto, menos lo pagado). |
 | `Budgeting` | Qué consume presupuesto, presupuesto vs real con proyección y alertas, gasto estimado de meses futuros no cubierto por gastos fijos y borrador para presupuestar meses futuros (`Propose`). |
@@ -367,6 +372,10 @@ classDiagram
         <<static>>
         +Horizon(today) DateOnly
         +RegenerateAsync(db, rule, today) Task~List~DateOnly~~
+    }
+    class CardStatementSync {
+        <<static>>
+        +RecalculateAsync(db, cardId) Task~List~StatementMove~~
     }
     class SheetImport {
         <<static>>
@@ -434,6 +443,7 @@ classDiagram
     DbContext <|-- FinanzasDbContext
     IInvestmentProvider <|.. SinProveedorDeInversiones
     RecurringRuleSync ..> FinanzasDbContext
+    CardStatementSync ..> FinanzasDbContext
     SheetImport ..> FinanzasDbContext
     SheetImport ..> SheetSnapshot
     SheetImport ..> RecurringRuleSync

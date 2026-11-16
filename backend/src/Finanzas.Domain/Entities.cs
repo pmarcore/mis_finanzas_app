@@ -120,9 +120,17 @@ public class Transaction
     public long Amount { get; set; }
     public int PaymentMethodId { get; set; }
     public int Installments { get; set; } = 1;
-    /// <summary>Con tarjeta: primer vencimiento, obligatorio, propuesto según CardCycle y editable.
+    /// <summary>Con tarjeta: vencimiento del primer resumen (copia calculada de los cierres, ver FirstStatementMonth).
     /// En un pago de tarjeta: el vencimiento del resumen que se paga.</summary>
     public DateOnly? FirstDueDate { get; set; }
+    /// <summary>
+    /// Con tarjeta: mes (día 1) del primer resumen; es lo que ata las cuotas, no la fecha. Sale de la fecha de compra y los
+    /// cierres, y se recalcula al cambiar los cierres salvo importadas, compromisos previos o fijado a mano.
+    /// En un pago de tarjeta: mes del resumen que se paga.
+    /// </summary>
+    public DateOnly? FirstStatementMonth { get; set; }
+    /// <summary>Resumen elegido a mano (el banco lo puso en otro): no se recalcula al cambiar cierres ni la fecha.</summary>
+    public bool StatementPinned { get; set; }
     public TransactionStatus Status { get; set; }
     public int? RecurringRuleId { get; set; }
     /// <summary>Tarjeta cuyo resumen se paga, solo para tipos OperationKind.PagoTarjeta.</summary>
@@ -130,6 +138,9 @@ public class Transaction
     /// <summary>Compra anterior a la apertura: solo proyecta cuotas, no consume presupuesto.</summary>
     public bool IsPriorCommitment { get; set; }
     public string? ImportId { get; set; }
+
+    /// <summary>Su resumen no se recalcula por fecha: importada (la fecha de la planilla no es la real), compromiso previo o fijado a mano.</summary>
+    public bool KeepsStatementMonth => StatementPinned || IsPriorCommitment || ImportId is not null;
     public List<CashImpact> Impacts { get; set; } = [];
 }
 
@@ -142,12 +153,14 @@ public class CashImpact
     /// <summary>Informado en compras con tarjeta: es una línea del resumen, no caja directa.</summary>
     public int? CardId { get; set; }
     public DateOnly ImpactDate { get; set; }
+    /// <summary>Líneas de tarjeta: mes (día 1) del resumen al que pertenece la cuota. ImpactDate es el vencimiento de ese resumen.</summary>
+    public DateOnly? StatementMonth { get; set; }
     /// <summary>Positivo entra a la caja, negativo sale.</summary>
     public long Amount { get; set; }
     public int InstallmentNumber { get; set; } = 1;
 }
 
-/// <summary>Resumen de una tarjeta en un vencimiento: si el real supera al modelado, manda el real.</summary>
+/// <summary>Resumen real de una tarjeta: se identifica por tarjeta y mes de DueDate. Si el real supera al modelado, manda el real.</summary>
 public class Statement
 {
     public int Id { get; set; }

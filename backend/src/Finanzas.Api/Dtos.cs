@@ -23,22 +23,29 @@ public static class Months
 public record TransactionDto(
     int Id, Scope Scope, int PersonId, int OperationTypeId, DateOnly Date, string Description, int? CategoryId,
     decimal Amount, int PaymentMethodId, int Installments, DateOnly? FirstDueDate, TransactionStatus Status,
-    int? RecurringRuleId, int? PaidCardId, bool IsPriorCommitment)
+    int? RecurringRuleId, int? PaidCardId, bool IsPriorCommitment, string? FirstStatementMonth, bool StatementPinned)
 {
     public static TransactionDto From(Transaction t) => new(
         t.Id, t.Scope, t.PersonId, t.OperationTypeId, t.Date, t.Description, t.CategoryId, Money.Pesos(t.Amount), t.PaymentMethodId,
-        t.Installments, t.FirstDueDate, t.Status, t.RecurringRuleId, t.PaidCardId, t.IsPriorCommitment);
+        t.Installments, t.FirstDueDate, t.Status, t.RecurringRuleId, t.PaidCardId, t.IsPriorCommitment,
+        t.FirstStatementMonth is { } m ? Months.Format(m) : null, t.StatementPinned);
 }
 
 public record NewTransactionDto(
     Scope Scope, int PersonId, int OperationTypeId, DateOnly Date, string Description, int? CategoryId, decimal Amount,
-    int PaymentMethodId, int Installments = 1, DateOnly? FirstDueDate = null, TransactionStatus? Status = null, int? PaidCardId = null)
+    int PaymentMethodId, int Installments = 1, DateOnly? FirstDueDate = null, TransactionStatus? Status = null, int? PaidCardId = null,
+    string? FirstStatementMonth = null, bool StatementPinned = false)
 {
+    /// <summary>Mes del resumen recibido: firstStatementMonth ('AAAA-MM') o, en clientes viejos, el mes de firstDueDate.</summary>
+    public DateOnly? StatementMonth() =>
+        Months.TryParse(FirstStatementMonth, out var m) ? m : FirstDueDate is { } d ? new DateOnly(d.Year, d.Month, 1) : null;
+
     public Transaction ToEntity() => new()
     {
         Scope = Scope, PersonId = PersonId, OperationTypeId = OperationTypeId, Date = Date, Description = Description, CategoryId = CategoryId,
         Amount = Money.Cents(Amount), PaymentMethodId = PaymentMethodId, Installments = Math.Max(1, Installments),
         FirstDueDate = FirstDueDate, Status = Status ?? TransactionStatus.Realizado, PaidCardId = PaidCardId,
+        FirstStatementMonth = StatementMonth(), StatementPinned = StatementPinned,
     };
 }
 
@@ -62,7 +69,14 @@ public record CardStatementDto(
 
 public record CardStatementsMonthDto(string DueMonth, decimal Total, decimal FilteredTotal, List<CardStatementDto> Cards);
 
-public record CardDueDateDto(int CardId, DateOnly PurchaseDate, DateOnly FirstDueDate);
+/// <summary>Resumen propuesto para una compra: mes ('AAAA-MM') y su vencimiento.</summary>
+public record CardDueDateDto(int CardId, DateOnly PurchaseDate, DateOnly FirstDueDate, string StatementMonth);
+
+/// <summary>Compra que pasó a otro resumen al cambiar los cierres.</summary>
+public record StatementMoveDto(int TransactionId, string Description, DateOnly Date, string FromMonth, string ToMonth);
+
+/// <summary>Respuesta al guardar cierres: los cierres y las compras que cambiaron de resumen.</summary>
+public record CardCyclesSavedDto(List<CardCycleDto> Cycles, List<StatementMoveDto> Moved);
 
 /// <summary>Con IncreasePercent el cambio es un incremento sobre el monto vigente; Amount vuelve calculado y se ignora al guardar.</summary>
 public record RecurringAmountDto(string FromMonth, decimal Amount, decimal? IncreasePercent = null);

@@ -22,7 +22,7 @@ public static class Endpoints
         if (method is null) return "Cada movimiento necesita un medio de pago válido.";
         if (method.IsCard && type.Kind is OperationKind.PagoTarjeta or OperationKind.Transferencia or OperationKind.Ahorro or OperationKind.Inversion)
             return $"{type.Name} sale de una caja, no de una tarjeta.";
-        if (type.Kind == OperationKind.PagoTarjeta && (t.PaidCardId is null || t.FirstDueDate is null))
+        if (type.Kind == OperationKind.PagoTarjeta && (t.PaidCardId is null || (t.FirstDueDate is null && t.FirstStatementMonth is null)))
             return "Un pago de tarjeta necesita la tarjeta y el vencimiento que paga.";
         return null;
     }
@@ -38,14 +38,30 @@ public static class Endpoints
 
         if (method!.IsCard)
         {
-            t.FirstDueDate ??= CardCalendar.ProposeDueDate(method.Cycles, t.Date);
-            if (t.FirstDueDate is null) return "Falta cargar el cierre de la tarjeta para esa fecha en Configuración.";
+            // El resumen sale de la fecha de compra y los cierres; el recibido solo manda si está fijado a mano, es importada
+            // o compromiso previo, o si todavía no hay cierre cargado para esa fecha.
+            var given = t.FirstStatementMonth;
+            var proposed = CardCalendar.ProposeStatementMonth(method.Cycles, t.Date);
+            t.FirstStatementMonth = t.KeepsStatementMonth ? given ?? proposed : proposed ?? given;
+            if (t.FirstStatementMonth is null) return "Falta cargar el cierre de la tarjeta para esa fecha en Configuración.";
+            if (given is null) t.StatementPinned = false;
         }
         else
         {
-            // Sin tarjeta no hay cuotas y sale de la caja en la fecha; solo un pago de tarjeta guarda el vencimiento que paga.
+            // Sin tarjeta no hay cuotas y sale de la caja en la fecha; solo un pago de tarjeta guarda el resumen que paga.
             t.Installments = 1;
-            if (type.Kind != OperationKind.PagoTarjeta) t.FirstDueDate = null;
+            t.StatementPinned = false;
+            if (type.Kind == OperationKind.PagoTarjeta)
+            {
+                var paidCycles = await db.CardCycles.Where(c => c.PaymentMethodId == t.PaidCardId).ToListAsync();
+                t.FirstStatementMonth ??= CardCalendar.MonthOf(t.FirstDueDate!.Value);
+                t.FirstDueDate = CardCalendar.DueDateFor(paidCycles, t.FirstStatementMonth.Value, t.FirstDueDate?.Day);
+            }
+            else
+            {
+                t.FirstDueDate = null;
+                t.FirstStatementMonth = null;
+            }
         }
 
         var boxes = await db.CashBoxes.ToDictionaryAsync(b => b.Scope, b => b.Id);
@@ -220,6 +236,7 @@ public static class Endpoints
             t.Scope = edited.Scope; t.PersonId = edited.PersonId; t.OperationTypeId = edited.OperationTypeId; t.OperationType = edited.OperationType;
             t.Date = edited.Date; t.Description = edited.Description; t.CategoryId = edited.CategoryId; t.Amount = edited.Amount;
             t.PaymentMethodId = edited.PaymentMethodId; t.Installments = edited.Installments; t.FirstDueDate = edited.FirstDueDate;
+            t.FirstStatementMonth = edited.FirstStatementMonth; t.StatementPinned = edited.StatementPinned;
             t.Status = edited.Status; t.PaidCardId = edited.PaidCardId;
             t.Impacts = edited.Impacts;
             await db.SaveChangesAsync();
@@ -236,8 +253,9 @@ public static class Endpoints
             t.Status = TransactionStatus.Realizado;
             t.Date = req?.Date ?? t.Date;
             if (req?.Amount is { } a) t.Amount = Money.Cents(a);
-            if (method.IsCard && t.OperationType.Kind != OperationKind.PagoTarjeta && t.RecurringRuleId is not null)
-                t.FirstDueDate = CardCalendar.ProposeDueDate(method.Cycles, t.Date) ?? t.FirstDueDate;
+            // La fecha confirmada puede caer en otro resumen.
+            if (method.IsCard && !t.KeepsStatementMonth)
+                t.FirstStatementMonth = CardCalendar.ProposeStatementMonth(method.Cycles, t.Date) ?? t.FirstStatementMonth;
             db.CashImpacts.RemoveRange(t.Impacts);
             t.Impacts = CashImpactBuilder.Build(t, method, s => boxes[s]);
             await db.SaveChangesAsync();
@@ -262,8 +280,9 @@ public static class Endpoints
         cards.MapGet("/{id:int}/due-date", async (int id, DateOnly purchaseDate, FinanzasDbContext db) =>
         {
             var cycles = await db.CardCycles.Where(c => c.PaymentMethodId == id).ToListAsync();
-            var due = CardCalendar.ProposeDueDate(cycles, purchaseDate);
-            return due is { } d ? Results.Ok(new CardDueDateDto(id, purchaseDate, d)) : Results.NotFound("No hay cierre cargado para esa fecha.");
+            return CardCalendar.ProposeStatementMonth(cycles, purchaseDate) is { } m
+                ? Results.Ok(new CardDueDateDto(id, purchaseDate, CardCalendar.DueDateFor(cycles, m), Months.Format(m)))
+                : Results.NotFound("No hay cierre cargado para esa fecha.");
         });
 
         // Meses de vencimiento con resúmenes de la entidad, para el combo de la pantalla Tarjetas.
@@ -273,7 +292,7 @@ public static class Endpoints
             var cards = await CardNames(db);
             return calc.CardStatementDetails(ScopeOrFamilia(scope), Today(), DateOnly.MaxValue)
                 .Where(s => cards.ContainsKey(s.CardId))
-                .GroupBy(s => Months.Format(s.DueDate))
+                .GroupBy(s => Months.Format(s.Month))
                 .OrderBy(g => g.Key)
                 .Select(g => new CardStatementMonthDto(g.Key, Money.Pesos(g.Sum(s => s.Expected)), Money.Pesos(g.Sum(s => s.Outstanding))));
         });
@@ -290,15 +309,15 @@ public static class Endpoints
             var calc = await CardCalculator(db);
 
             var lines = calc.CardLines(sc)
-                .Where(x => x.Impact.ImpactDate >= first && x.Impact.ImpactDate <= last && (cardId == null || x.Impact.CardId == cardId))
-                .ToLookup(x => (Card: x.Impact.CardId!.Value, Due: x.Impact.ImpactDate));
+                .Where(x => CashFlowCalculator.StatementMonthOf(x.Impact) == first && (cardId == null || x.Impact.CardId == cardId))
+                .ToLookup(x => x.Impact.CardId!.Value);
 
-            var result = calc.CardStatementDetails(sc, Today(), last)
-                .Where(s => s.DueDate >= first && cards.ContainsKey(s.CardId) && (cardId == null || s.CardId == cardId))
+            var result = calc.CardStatementDetails(sc, Today(), DateOnly.MaxValue)
+                .Where(s => s.Month == first && cards.ContainsKey(s.CardId) && (cardId == null || s.CardId == cardId))
                 .OrderBy(s => s.DueDate).ThenBy(s => cards[s.CardId])
                 .Select(s =>
                 {
-                    var own = lines[(s.CardId, s.DueDate)]
+                    var own = lines[s.CardId]
                         .Where(x => recurring == null || (x.Tx.RecurringRuleId != null) == recurring)
                         .OrderBy(x => x.Tx.Date).ThenBy(x => x.Tx.Id)
                         .Select(x => new CardStatementLineDto(
@@ -324,12 +343,17 @@ public static class Endpoints
             db.CardCycles.AddRange(body.Select(c => new CardCycle { PaymentMethodId = id, ClosingDate = c.ClosingDate, DueDate = c.DueDate }));
             await db.SaveChangesAsync();
 
-            // Con nuevos cierres cambian los vencimientos propuestos de los gastos fijos con esta tarjeta.
+            // Con nuevos cierres cambian los previstos de los gastos fijos con esta tarjeta, el resumen de las compras según
+            // su fecha y el vencimiento de cada cuota.
             foreach (var rule in await db.RecurringRules.Include(r => r.Amounts).Where(r => r.PaymentMethodId == id).ToListAsync())
                 await RecurringRuleSync.RegenerateAsync(db, rule, Today());
             await db.SaveChangesAsync();
+            var moved = await CardStatementSync.RecalculateAsync(db, id);
+            await db.SaveChangesAsync();
 
-            return Results.Ok((await db.CardCycles.Where(c => c.PaymentMethodId == id).OrderBy(c => c.DueDate).ToListAsync()).Select(CardCycleDto.From));
+            var saved = (await db.CardCycles.Where(c => c.PaymentMethodId == id).OrderBy(c => c.DueDate).ToListAsync()).Select(CardCycleDto.From).ToList();
+            return Results.Ok(new CardCyclesSavedDto(saved, moved
+                .Select(m => new StatementMoveDto(m.TransactionId, m.Description, m.Date, Months.Format(m.FromMonth), Months.Format(m.ToMonth))).ToList()));
         });
     }
 

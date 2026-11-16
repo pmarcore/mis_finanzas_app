@@ -1,6 +1,6 @@
 # Spec: las cuotas se atan al resumen, no a una fecha de vencimiento
 
-Estado: **borrador, pendiente de aprobación de Pablo**.
+Estado: **aprobada** (PR 23, 2026-11-16). Preguntas resueltas con lo recomendado: se puede fijar a mano el resumen; meses sin cierre usan el día del último vencimiento.
 Pedido: Pablo, 2026-11-16 (hilo "Diagnosticar cuotas atadas a vencimiento")
 
 > "Para el mes de diciembre veo dos secciones separadas para la misma tarjeta, una con vencimiento 04/12 y otra con vencimiento 11/12. [...] las cuotas no deberían quedar atadas directamente a una fecha de vencimiento. Revisalo y dame tu diagnóstico y propuesta de solución."

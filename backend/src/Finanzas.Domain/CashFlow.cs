@@ -7,12 +7,34 @@ namespace Finanzas.Domain;
 /// </summary>
 public static class CardCalendar
 {
+    public static DateOnly MonthOf(DateOnly d) => new(d.Year, d.Month, 1);
+
     /// <summary>Vencimiento del primer cierre igual o posterior a la fecha de compra. Null si falta cargar el ciclo.</summary>
     public static DateOnly? ProposeDueDate(IEnumerable<CardCycle> cycles, DateOnly purchaseDate) =>
+        ProposeStatementMonth(cycles, purchaseDate) is { } m ? DueDateFor(cycles, m) : null;
+
+    /// <summary>Mes del resumen de una compra: el del vencimiento del primer cierre igual o posterior a la fecha. Null si falta el cierre.</summary>
+    public static DateOnly? ProposeStatementMonth(IEnumerable<CardCycle> cycles, DateOnly purchaseDate) =>
         cycles.Where(c => c.ClosingDate >= purchaseDate)
               .OrderBy(c => c.ClosingDate)
-              .Select(c => (DateOnly?)c.DueDate)
+              .Select(c => (DateOnly?)MonthOf(c.DueDate))
               .FirstOrDefault();
+
+    /// <summary>
+    /// Vencimiento del resumen de un mes: el del cierre cargado para ese mes. Si no hay, el mismo día que el último vencimiento
+    /// cargado antes de ese mes (o fallbackDay si la tarjeta no tiene ninguno), ajustado al largo del mes.
+    /// </summary>
+    public static DateOnly DueDateFor(IEnumerable<CardCycle> cycles, DateOnly month, int? fallbackDay = null)
+    {
+        var m = MonthOf(month);
+        var list = cycles.ToList();
+        var own = list.Where(c => MonthOf(c.DueDate) == m).OrderBy(c => c.DueDate).FirstOrDefault();
+        if (own is not null) return own.DueDate;
+        var day = list.Where(c => c.DueDate < m).OrderByDescending(c => c.DueDate).Select(c => (int?)c.DueDate.Day).FirstOrDefault()
+                  ?? list.OrderBy(c => c.DueDate).Select(c => (int?)c.DueDate.Day).FirstOrDefault()
+                  ?? fallbackDay ?? 10;
+        return new DateOnly(m.Year, m.Month, Math.Min(day, DateTime.DaysInMonth(m.Year, m.Month)));
+    }
 }
 
 public static class CashImpactBuilder
@@ -40,8 +62,13 @@ public static class CashImpactBuilder
         if (!method.IsCard)
             return [new CashImpact { CashBoxId = cashBoxOf(tx.Scope), ImpactDate = tx.Date, Amount = sign * tx.Amount }];
 
-        if (tx.FirstDueDate is not { } firstDue)
-            throw new InvalidOperationException("Con tarjeta, el primer vencimiento es obligatorio.");
+        // Las cuotas se atan al resumen (tarjeta + mes); la fecha de cada una es el vencimiento cargado para su mes.
+        var first = tx.FirstStatementMonth ?? (tx.FirstDueDate is { } d ? (DateOnly?)CardCalendar.MonthOf(d) : null)
+            ?? throw new InvalidOperationException("Con tarjeta, el primer resumen es obligatorio.");
+        first = CardCalendar.MonthOf(first);
+        var fallbackDay = tx.FirstDueDate?.Day;
+        tx.FirstStatementMonth = first;
+        tx.FirstDueDate = CardCalendar.DueDateFor(method.Cycles, first, fallbackDay);
 
         var n = Math.Max(1, tx.Installments);
         var installment = tx.Amount / n;
@@ -50,7 +77,8 @@ public static class CashImpactBuilder
         {
             CashBoxId = cashBoxOf(tx.Scope),
             CardId = method.Id,
-            ImpactDate = firstDue.AddMonths(i),
+            StatementMonth = first.AddMonths(i),
+            ImpactDate = CardCalendar.DueDateFor(method.Cycles, first.AddMonths(i), fallbackDay),
             Amount = sign * (installment + (i == 0 ? remainder : 0)),
             InstallmentNumber = i + 1,
         }).ToList();
@@ -91,6 +119,7 @@ public static class RecurringRuleExpander
                 CategoryId = rule.CategoryId,
                 Amount = AmountFor(rule, m),
                 PaymentMethodId = rule.PaymentMethodId,
+                FirstStatementMonth = method.IsCard ? CardCalendar.ProposeStatementMonth(method.Cycles, date) : null,
                 FirstDueDate = method.IsCard ? CardCalendar.ProposeDueDate(method.Cycles, date) : null,
                 Status = TransactionStatus.Previsto,
                 RecurringRuleId = rule.Id,
@@ -107,6 +136,13 @@ public class CashFlowCalculator(
     IReadOnlyList<BudgetEstimate>? estimates = null)
 {
     static bool IsCardPayment(Transaction t) => t.OperationType.Kind == OperationKind.PagoTarjeta;
+
+    /// <summary>Mes del resumen de una línea de tarjeta (las viejas sin StatementMonth, el de su fecha).</summary>
+    public static DateOnly StatementMonthOf(CashImpact i) => i.StatementMonth ?? CardCalendar.MonthOf(i.ImpactDate);
+
+    /// <summary>Mes del resumen que paga un pago de tarjeta.</summary>
+    public static DateOnly? PaidMonthOf(Transaction t) =>
+        t.FirstStatementMonth ?? (t.FirstDueDate is { } d ? (DateOnly?)CardCalendar.MonthOf(d) : null);
 
     IEnumerable<CashBox> Boxes(Scope? scope) => boxes.Where(b => scope is null || b.Scope == scope);
 
@@ -192,24 +228,29 @@ public class CashFlowCalculator(
 
     IEnumerable<CardStatementSummary> StatementSummaries(List<(Transaction Tx, CashImpact Impact)> impacts, DateOnly cutoff, DateOnly until)
     {
-        var modeled = impacts.Where(x => x.Impact.CardId is not null)
-            .GroupBy(x => (Card: x.Impact.CardId!.Value, Due: x.Impact.ImpactDate))
-            .ToDictionary(g => g.Key, g => -g.Sum(x => x.Impact.Amount));
+        // Un resumen es una tarjeta en un mes: nunca hay dos de la misma tarjeta en el mismo mes, aunque las fechas difieran.
+        var lines = impacts.Where(x => x.Impact.CardId is not null)
+            .GroupBy(x => (Card: x.Impact.CardId!.Value, Month: StatementMonthOf(x.Impact)))
+            .ToDictionary(g => g.Key, g => (Modeled: -g.Sum(x => x.Impact.Amount), Due: g.Min(x => x.Impact.ImpactDate)));
 
-        var payments = impacts.Where(x => IsCardPayment(x.Tx) && x.Tx.PaidCardId is not null && x.Tx.FirstDueDate is not null)
-            .GroupBy(x => (Card: x.Tx.PaidCardId!.Value, Due: x.Tx.FirstDueDate!.Value))
+        var payments = impacts.Where(x => IsCardPayment(x.Tx) && x.Tx.PaidCardId is not null && PaidMonthOf(x.Tx) is not null)
+            .GroupBy(x => (Card: x.Tx.PaidCardId!.Value, Month: PaidMonthOf(x.Tx)!.Value))
             .ToDictionary(g => g.Key, g => (
                 Planned: -g.Where(x => x.Tx.Status == TransactionStatus.Previsto).Sum(x => x.Impact.Amount),
-                Paid: -g.Where(x => x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate <= cutoff).Sum(x => x.Impact.Amount)));
+                Paid: -g.Where(x => x.Tx.Status == TransactionStatus.Realizado && x.Impact.ImpactDate <= cutoff).Sum(x => x.Impact.Amount),
+                Due: g.Min(x => x.Tx.FirstDueDate ?? PaidMonthOf(x.Tx)!.Value)));
 
-        var keys = modeled.Keys.Union(payments.Keys).Where(k => k.Due <= until).Distinct();
-        foreach (var k in keys.OrderBy(k => k.Due))
+        var keys = lines.Keys.Union(payments.Keys).Distinct()
+            .Select(k => (Key: k, Due: lines.TryGetValue(k, out var l) ? l.Due : payments[k].Due))
+            .Where(k => k.Due <= until);
+        foreach (var (k, due) in keys.OrderBy(k => k.Due).ThenBy(k => k.Key.Card))
         {
-            var confirmed = statements.FirstOrDefault(s => s.PaymentMethodId == k.Card && s.DueDate == k.Due)?.ConfirmedAmount;
+            var confirmed = statements.Where(s => s.PaymentMethodId == k.Card && CardCalendar.MonthOf(s.DueDate) == k.Month)
+                .Max(s => s.ConfirmedAmount);
             var pay = payments.GetValueOrDefault(k);
-            var model = modeled.GetValueOrDefault(k);
+            var model = lines.GetValueOrDefault(k).Modeled;
             var expected = Math.Max(Math.Max(model, confirmed ?? 0), pay.Planned + pay.Paid);
-            yield return new CardStatementSummary(k.Card, k.Due, model, confirmed, pay.Paid, expected, Math.Max(0, expected - pay.Paid));
+            yield return new CardStatementSummary(k.Card, due, model, confirmed, pay.Paid, expected, Math.Max(0, expected - pay.Paid)) { Month = k.Month };
         }
     }
 }
@@ -218,7 +259,11 @@ public class CashFlowCalculator(
 /// Un resumen de tarjeta: lo modelado (suma de líneas), el real confirmado, lo pagado al corte, lo esperado
 /// (el mayor entre modelado, real y pago previsto + pagado) y lo pendiente.
 /// </summary>
-public record CardStatementSummary(int CardId, DateOnly DueDate, long Modeled, long? Confirmed, long Paid, long Expected, long Outstanding);
+public record CardStatementSummary(int CardId, DateOnly DueDate, long Modeled, long? Confirmed, long Paid, long Expected, long Outstanding)
+{
+    /// <summary>Mes del resumen (día 1): identifica el resumen junto con la tarjeta.</summary>
+    public DateOnly Month { get; init; } = CardCalendar.MonthOf(DueDate);
+}
 
 /// <summary>Saldos de ahorro e inversión: lo que salió de la caja hacia ellos menos lo que volvió. Se ven aparte de la caja.</summary>
 public static class Savings

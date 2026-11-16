@@ -40,7 +40,7 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 
 ## Tests
 
-`cd backend && dotnet test` (72 tests).
+`cd backend && dotnet test` (82 tests).
 
 | Archivo | Qué prueba |
 | --- | --- |
@@ -50,6 +50,7 @@ base, probar en la PC sin celular). Acá van las convenciones y cómo se prueba.
 | `ConfiguracionTests.cs` | Tipos de operación por ámbito, cambio de efecto que recalcula movimientos, ahorro e inversión aparte de la caja, alta y desactivación de categorías y medios de pago |
 | `VigenciaEIncrementosTests.cs` | Gastos fijos con vigencia desde-hasta e incrementos % acumulados: montos por mes, previstos generados por la API y validaciones (primer cambio es un monto y rige desde el inicio, ningún cambio después del hasta, hasta no anterior a desde) |
 | `PresupuestoMesesFuturosTests.cs` | Proyectar presupuesto: fuente presupuesto (con herencia) o real de un mes cerrado, ajuste % único y redondeo a $1.000, fijos con incrementos y vigencia (Fijo/Deuda vs. Variable), guardado de varios meses sin tocar la otra entidad, aviso de herencia y validaciones |
+| `CuotasPorResumenTests.cs` | Cuotas atadas al resumen (tarjeta + mes): cada cuota en el vencimiento de su mes, mes sin cierre, resumen por fecha de compra, corregir el vencimiento de diciembre une las cuotas importadas en un solo resumen, cambiar un cierre pasa la compra al resumen siguiente con todas sus cuotas, resumen fijado a mano, pago de tarjeta por mes |
 | `PresupuestoPorEntidadTests.cs` | Presupuesto de Familia y de Memey guardados y reportados por separado, detalle de movimientos de una categoría del presupuesto vs. real (suma igual al real) y filtros del listado por categoría y medio de pago |
 | `LoginYBackupTests.cs` | Login con usuarios de la configuración: rutas protegidas salvo `/health` y `/auth/login`, usuario sin mayúsculas, contraseña incorrecta, límite de 5 intentos por minuto, token vencido, cambio de contraseña que cierra solo las sesiones de ese usuario, copia diaria (una por día, guarda las últimas N) y descarga del backup |
 | `ConsumosPorTarjetaTests.cs` | Resúmenes de tarjeta por mes de vencimiento: compra en 6 cuotas con el resto en la primera, cabecera igual a Pagos de tarjeta y pago parcial, vista unificada, filtro de fijos (cambia líneas, no cabecera) con fijo previsto en su resumen, `recurring` en `/transactions`, separación Familia/Memey y validaciones |

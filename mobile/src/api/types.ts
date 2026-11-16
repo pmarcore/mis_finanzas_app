@@ -180,12 +180,17 @@ export interface Transaction {
   recurringRuleId?: Id | null;
   paidCardId?: Id | null;
   isPriorCommitment: boolean;
+  /** Con tarjeta: mes del primer resumen (en un pago, el resumen que paga). Las cuotas se atan a este mes, no a una fecha. */
+  firstStatementMonth?: Month | null;
+  /** Resumen elegido a mano: no se recalcula por fecha de compra ni al cambiar cierres. */
+  statementPinned?: boolean;
 }
 
 /**
  * Payload de POST /transactions.
- * - Compra con tarjeta: `firstDueDate` puede omitirse (el backend lo propone según los cierres).
- * - Tipo de operación `pagoTarjeta`: `paidCardId` y `firstDueDate` (vencimiento que se paga) son obligatorios.
+ * - Compra con tarjeta: el resumen sale de la fecha de compra y los cierres. Para elegirlo a mano se manda
+ *   `firstStatementMonth` con `statementPinned: true`.
+ * - Tipo de operación `pagoTarjeta`: `paidCardId` y el resumen que paga (`firstStatementMonth` o `firstDueDate`) son obligatorios.
  */
 export interface NewTransaction {
   scope: Scope;
@@ -198,6 +203,8 @@ export interface NewTransaction {
   paymentMethodId: Id;
   installments: number;
   firstDueDate?: ISODate;
+  firstStatementMonth?: Month;
+  statementPinned?: boolean;
   status?: TransactionStatus;
   paidCardId?: Id;
 }
@@ -388,6 +395,23 @@ export interface CardDueDate {
   cardId: Id;
   purchaseDate: ISODate;
   firstDueDate: ISODate;
+  /** Mes del resumen que le toca por fecha. */
+  statementMonth: Month;
+}
+
+/** Compra que pasó a otro resumen al guardar los cierres. */
+export interface StatementMove {
+  transactionId: Id;
+  description: string;
+  date: ISODate;
+  fromMonth: Month;
+  toMonth: Month;
+}
+
+/** Respuesta de PUT /cards/{id}/cycles. */
+export interface CardCyclesSaved {
+  cycles: CardCycle[];
+  moved: StatementMove[];
 }
 
 export interface Thresholds {
