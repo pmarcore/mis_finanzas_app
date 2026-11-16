@@ -17,6 +17,7 @@ import {
   type CategoryKind,
   type Id,
   type ISODate,
+  type Month,
   type NewTransaction,
   type OperationType,
   type Scope,
@@ -33,7 +34,7 @@ import type { TabScreenProps } from '../navigation/types';
 import { useScope } from '../state/scope';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
 import { Alert } from '../utils/alert';
-import { addMonths, amountToInput, formatDate, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
+import { addMonths, amountToInput, formatDate, formatMonth, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
 
 /** Tipo propuesto al abrir o al cambiar de destino: el primer gasto común ofrecido, si no el primero. */
 function defaultType(types: OperationType[]): OperationType | undefined {
@@ -79,9 +80,11 @@ export function MovimientoForm({
   const [categoryId, setCategoryId] = useState<Id | undefined>(initial?.categoryId ?? undefined);
   const [paymentMethodId, setPaymentMethodId] = useState<Id | undefined>(initial?.paymentMethodId);
   const [installmentsText, setInstallmentsText] = useState(String(initial?.installments ?? 1));
+  // Pago de tarjeta: vencimiento (y con él, el mes del resumen) que se paga.
   const [firstDueDate, setFirstDueDate] = useState(initial?.firstDueDate ?? '');
-  // Al editar, el vencimiento guardado se respeta hasta que cambie la fecha, el medio o el tipo.
-  const [dueEdited, setDueEdited] = useState(!!initial?.firstDueDate);
+  // Compra con tarjeta: el resumen sale de la fecha de compra y los cierres, salvo que se elija a mano.
+  const [pinned, setPinned] = useState(!!initial?.statementPinned);
+  const [pinnedMonth, setPinnedMonth] = useState<Month>(initial?.statementPinned ? (initial.firstStatementMonth ?? '') : '');
   const [paidCardId, setPaidCardId] = useState<Id | undefined>(initial?.paidCardId ?? undefined);
   const [submitted, setSubmitted] = useState(false);
 
@@ -121,8 +124,15 @@ export function MovimientoForm({
   const method = allMethods.find((m) => m.id === paymentMethodId);
   const isCardPurchase = !isCardPayment && !!method?.isCard;
 
-  // Compra con tarjeta: primer vencimiento sugerido por el backend (404 si falta el cierre).
+  // Compra con tarjeta: resumen que le toca por fecha, según los cierres (404 si falta el cierre).
   const due = useCardDueDate(isCardPurchase ? method?.id : undefined, isValidISODate(date) ? date : undefined);
+  // Meses para elegir el resumen a mano: alrededor del que le toca por fecha.
+  const monthOptions = useMemo(() => {
+    const base = due.data?.statementMonth ?? (isValidISODate(date) ? addMonths(monthOf(date), 1) : monthOf(todayISO()));
+    const list = Array.from({ length: 9 }, (_, i) => addMonths(base, i - 2));
+    if (pinnedMonth && !list.includes(pinnedMonth)) list.push(pinnedMonth);
+    return list.sort();
+  }, [due.data?.statementMonth, date, pinnedMonth]);
   // Pago de tarjeta: vencimientos cargados de la tarjeta pagada, para elegir rápido.
   const paidCycles = useCardCycles(isCardPayment ? paidCardId : undefined);
   const dueOptions = useMemo(
@@ -130,18 +140,14 @@ export function MovimientoForm({
     [paidCycles.data, date],
   );
 
-  // El vencimiento se vuelve a proponer solo cuando cambia algo de lo que depende (no al abrir para editar).
-  const dueInputs = useRef([paymentMethodId, date, operationTypeId, paidCardId]);
+  // El vencimiento que se paga se limpia solo cuando cambia la tarjeta pagada o el tipo (no al abrir para editar).
+  const dueInputs = useRef([operationTypeId, paidCardId]);
   useEffect(() => {
-    const next = [paymentMethodId, date, operationTypeId, paidCardId];
+    const next = [operationTypeId, paidCardId];
     if (next.every((v, i) => v === dueInputs.current[i])) return;
     dueInputs.current = next;
-    setDueEdited(false);
     setFirstDueDate('');
-  }, [paymentMethodId, date, operationTypeId, paidCardId]);
-  useEffect(() => {
-    if (isCardPurchase && !dueEdited && !firstDueDate && due.data?.firstDueDate) setFirstDueDate(due.data.firstDueDate);
-  }, [isCardPurchase, dueEdited, firstDueDate, due.data?.firstDueDate]);
+  }, [operationTypeId, paidCardId]);
 
   // Si cambia la operación/destino y la categoría o el medio ya no aplican, se limpian (una vez cargados los catálogos).
   const catalogsReady = !!type && !!categories.data && !!paymentMethods.data;
@@ -169,8 +175,8 @@ export function MovimientoForm({
       ? !isValidISODate(firstDueDate)
         ? 'Indicá el vencimiento que pagás (AAAA-MM-DD).'
         : undefined
-      : isCardPurchase && firstDueDate !== '' && !isValidISODate(firstDueDate)
-        ? 'Fecha inválida (AAAA-MM-DD).'
+      : isCardPurchase && pinned && !pinnedMonth
+        ? 'Elegí el resumen.'
         : undefined,
   };
   const hasErrors = Object.values(errors).some(Boolean);
@@ -181,7 +187,8 @@ export function MovimientoForm({
     setDescription('');
     setInstallmentsText('1');
     setFirstDueDate('');
-    setDueEdited(false);
+    setPinned(false);
+    setPinnedMonth('');
     setPaidCardId(undefined);
     setSubmitted(false);
   };
@@ -199,8 +206,15 @@ export function MovimientoForm({
       amount,
       paymentMethodId,
       installments: isCardPurchase ? installments : 1,
-      // Compra con tarjeta: si queda vacío, el backend propone el vencimiento según los cierres.
-      firstDueDate: (isCardPurchase || isCardPayment) && firstDueDate ? firstDueDate : undefined,
+      // Pago: el resumen que paga. Compra: el resumen lo calcula el backend por fecha, salvo elegido a mano; al editar se
+      // manda el guardado, que el backend solo respeta en importadas y compromisos previos (su fecha no es la real).
+      firstDueDate: isCardPayment && firstDueDate ? firstDueDate : undefined,
+      firstStatementMonth: isCardPayment
+        ? firstDueDate ? monthOf(firstDueDate) : undefined
+        : isCardPurchase
+          ? pinned ? pinnedMonth : (initial?.firstStatementMonth ?? undefined)
+          : undefined,
+      statementPinned: isCardPurchase && pinned,
       status,
       paidCardId: isCardPayment ? paidCardId : undefined,
     };
@@ -244,11 +258,15 @@ export function MovimientoForm({
         : type.effect === 'suma'
           ? 'Suma a la caja.'
           : 'Resta de la caja.';
-  const dueHint = due.isFetching
-    ? 'Calculando según cierre de la tarjeta…'
-    : due.error
-      ? 'Falta cargar el cierre de la tarjeta para esa fecha en Configuración.'
-      : 'Sugerido según el cierre; podés editarlo.';
+  const dueHint = pinned
+    ? 'Elegido a mano: no cambia aunque cambien la fecha o los cierres.'
+    : due.isFetching
+      ? 'Calculando según el cierre de la tarjeta…'
+      : due.error
+        ? 'Falta cargar el cierre de la tarjeta para esa fecha en Configuración.'
+        : due.data
+          ? `Por la fecha de compra: resumen de ${formatMonth(due.data.statementMonth)}, vence ${formatDate(due.data.firstDueDate)}. Si cambian los cierres, se recalcula.`
+          : undefined;
 
   return (
     <Screen>
@@ -347,7 +365,7 @@ export function MovimientoForm({
             />
           </Field>
           <Field
-            label="Vencimiento que pagás"
+            label="Resumen que pagás"
             error={show(errors.firstDueDate)}
             hint={
               paidCardId !== undefined && !paidCycles.isLoading && dueOptions.length === 0
@@ -359,7 +377,7 @@ export function MovimientoForm({
               <ChipPicker
                 items={dueOptions}
                 getKey={(d) => d}
-                getLabel={formatDate}
+                getLabel={(d) => `${formatMonth(monthOf(d))} (vence ${formatDate(d)})`}
                 selectedKey={firstDueDate}
                 onSelect={setFirstDueDate}
                 accent={accent}
@@ -375,14 +393,30 @@ export function MovimientoForm({
           <Field label="Cuotas" error={show(errors.installments)}>
             <Input value={installmentsText} onChangeText={setInstallmentsText} keyboardType="number-pad" maxLength={2} />
           </Field>
-          <Field label="Primer vencimiento" error={show(errors.firstDueDate)} hint={dueHint}>
-            <DateInput
-              value={firstDueDate}
-              onChangeText={(t) => {
-                setDueEdited(true);
-                setFirstDueDate(t);
+          <Field label="Primer resumen" error={show(errors.firstDueDate)} hint={dueHint}>
+            <Segmented<'auto' | 'manual'>
+              value={pinned ? 'manual' : 'auto'}
+              onChange={(v) => {
+                setPinned(v === 'manual');
+                if (v === 'manual' && !pinnedMonth && due.data) setPinnedMonth(due.data.statementMonth);
               }}
+              options={[
+                { value: 'auto', label: 'Por fecha', color: accent },
+                { value: 'manual', label: 'Elegir a mano', color: colors.warn },
+              ]}
             />
+            {pinned && (
+              <Select
+                title="Resumen"
+                placeholder="Elegí el resumen"
+                items={monthOptions}
+                getKey={(m) => m}
+                getLabel={formatMonth}
+                selectedKey={pinnedMonth || undefined}
+                onSelect={setPinnedMonth}
+                accent={accent}
+              />
+            )}
           </Field>
         </Card>
       )}

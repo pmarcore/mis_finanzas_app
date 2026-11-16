@@ -86,6 +86,8 @@ erDiagram
         INTEGER PaymentMethodId
         INTEGER Installments
         TEXT FirstDueDate "nullable"
+        TEXT FirstStatementMonth "nullable, dia 1 del mes"
+        INTEGER StatementPinned
         INTEGER Status "Realizado, Previsto"
         INTEGER RecurringRuleId "nullable"
         INTEGER PaidCardId "nullable, solo PagoTarjeta"
@@ -98,6 +100,7 @@ erDiagram
         INTEGER CashBoxId
         INTEGER CardId "nullable, linea de resumen"
         TEXT ImpactDate
+        TEXT StatementMonth "nullable, linea de resumen"
         INTEGER Amount "centavos, + entra / - sale"
         INTEGER InstallmentNumber
     }
@@ -220,7 +223,8 @@ compra o del hecho: define el consumo en el presupuesto. El efecto en la caja no
 | `OperationTypeId` | FK a `OperationTypes` con `ON DELETE RESTRICT`. El tipo define signo y comportamiento. |
 | `CategoryId` | Opcional (los pagos de tarjeta y transferencias no llevan categoría). |
 | `Amount` | Total de la compra, con intereses si es en cuotas. Siempre positivo; el signo lo pone el tipo. |
-| `Installments`, `FirstDueDate` | Con tarjeta: cantidad de cuotas y primer vencimiento (propuesto con `CardCycles`). En un pago de tarjeta, `FirstDueDate` es el vencimiento que se paga. |
+| `Installments`, `FirstStatementMonth`, `FirstDueDate` | Con tarjeta: cantidad de cuotas y mes del primer resumen. **Las cuotas se atan al resumen (tarjeta + mes), no a una fecha.** El mes sale de la fecha de compra y los `CardCycles` (primer cierre igual o posterior) y se recalcula al cambiar los cierres o la fecha; `FirstDueDate` es una copia del vencimiento de ese mes. En un pago de tarjeta, el mes y el vencimiento del resumen que se paga. |
+| `StatementPinned` | Resumen elegido a mano (el banco puso la compra en otro): no se recalcula. Tampoco se recalcula el mes de importadas ni de compromisos previos, porque su fecha de compra no es la real. |
 | `PaidCardId` | Tarjeta cuyo resumen se paga (solo tipos `PagoTarjeta`). |
 | `RecurringRuleId` | Si el movimiento lo generó un gasto fijo. |
 | `IsPriorCommitment` | Compra anterior a la apertura: proyecta cuotas pero no consume presupuesto. |
@@ -234,8 +238,10 @@ Una entrada o salida de caja. **Todas las proyecciones leen solo esta tabla.** S
 y se regeneran cuando cambia el movimiento, su tipo o (para gastos fijos) los cierres de la tarjeta.
 
 - Sin tarjeta: un impacto en la fecha del movimiento.
-- Con tarjeta: un impacto por cuota, en cada vencimiento, con `CardId` informado. Son líneas del resumen, no caja
-  directa: la caja la mueve el pago del resumen.
+- Con tarjeta: un impacto por cuota con `CardId` y `StatementMonth` (mes del resumen: primer resumen + cuota − 1).
+  `ImpactDate` es el vencimiento cargado para ese mes en `CardCycles`; si el mes no tiene cierre, el mismo día que el
+  último vencimiento cargado. Al guardar cierres se actualizan todas. Son líneas del resumen, no caja directa: la caja la
+  mueve el pago del resumen. Un resumen es una tarjeta en un mes: nunca hay dos de la misma tarjeta en el mismo mes.
 - Transferencia: dos impactos, uno negativo en la caja de origen y otro positivo en la de destino.
 
 Índices: `ImpactDate`, `TransactionId`.
@@ -251,7 +257,7 @@ Configurables desde la app. `Kind` define el comportamiento, `Effect` si suma o 
 - `PaymentMethods`: débito, efectivo, billetera o tarjeta, con su caja habitual. `OpeningCardDebt` es la deuda de la
   tarjeta a la apertura.
 - `CardCycles`: cierre y vencimiento de cada tarjeta, uno por mes (único por tarjeta y vencimiento). FK con cascada.
-- `Statements`: resumen real de una tarjeta en un vencimiento. Si supera al modelado, manda el real (nunca se suman).
+- `Statements`: resumen real de una tarjeta en un mes (se busca por el mes de `DueDate`). Si supera al modelado, manda el real (nunca se suman).
   Hoy se carga por importación de la planilla; la API no tiene un endpoint para editarlo.
 
 ### RecurringRules y RecurringRuleAmounts (gastos fijos)
@@ -339,6 +345,7 @@ En `backend/src/Finanzas.Infrastructure/Migrations/`:
 | `20261012014247_TiposDeOperacionAhorroInversion` | Tabla `OperationTypes`: la columna `Operation` (enum) de movimientos y gastos fijos pasa a ser `OperationTypeId` con FK. Agrega `Active` en categorías y medios de pago, y la tabla `InvestmentValuations`. |
 | `20261021141201_DashboardInversiones` | Tablas `InvestmentSnapshots`, `ManualHoldings`, `InvestmentTargets` e `InvestmentSettings` (con su fila sembrada). |
 | `20261112160723_UsuariosYLogin` | Tabla `Users` con índice único por `Username`. |
+| `20261116231610_CuotasPorResumen` | Columnas `FirstStatementMonth` y `StatementPinned` en `Transactions` y `StatementMonth` en `CashImpacts`, completadas con el mes de la fecha que tenían. Al arrancar, la API recalcula resumen por fecha de compra y vencimientos con los cierres (`CardStatementSync`) y deja en el log las compras que cambian de resumen. |
 | `20261019213123_IncrementoPorcentualEnFijos` | Columna `IncreasePercent` (nullable) en `RecurringRuleAmounts` para los incrementos % previstos de los gastos fijos. Las filas existentes quedan como montos fijos. |
 
 Para crear una nueva (desde `backend/`):

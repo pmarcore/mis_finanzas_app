@@ -164,6 +164,9 @@ namespace Finanzas.Infrastructure.Migrations
                     b.Property<int>("InstallmentNumber")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateOnly?>("StatementMonth")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("TransactionId")
                         .HasColumnType("INTEGER");
 
@@ -813,6 +816,9 @@ namespace Finanzas.Infrastructure.Migrations
                     b.Property<DateOnly?>("FirstDueDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateOnly?>("FirstStatementMonth")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ImportId")
                         .HasColumnType("TEXT");
 
@@ -838,6 +844,9 @@ namespace Finanzas.Infrastructure.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Scope")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("StatementPinned")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("Status")

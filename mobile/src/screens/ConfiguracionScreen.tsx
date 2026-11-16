@@ -11,7 +11,7 @@ import {
   useUpdateCashBox,
   useUpdateSettings,
 } from '../api/endpoints';
-import type { CardCycle, CashBox, Id, Thresholds } from '../api/types';
+import type { CardCycle, CashBox, Id, StatementMove, Thresholds } from '../api/types';
 import { Card } from '../components/Card';
 import { ChipPicker } from '../components/ChipPicker';
 import { DateInput, Field, Input } from '../components/Field';
@@ -20,7 +20,7 @@ import { Screen } from '../components/Screen';
 import { useAuth } from '../state/auth';
 import { Alert } from '../utils/alert';
 import { radius, scopeColor, spacing, useTheme } from '../theme';
-import { addMonths, amountToInput, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
+import { addMonths, amountToInput, formatMonth, isValidISODate, monthOf, parseAmount, todayISO } from '../utils/format';
 
 function SaveButton({
   onPress,
@@ -255,8 +255,11 @@ function CiclosSection() {
   const q = useCardCycles(selected);
   const save = useUpdateCardCycles(selected);
   const [cycles, setCycles] = useState<CardCycle[]>([]);
+  // Compras que cambiaron de resumen con el último guardado.
+  const [moved, setMoved] = useState<StatementMove[] | null>(null);
 
   useEffect(() => setCycles(q.data ?? []), [q.data]);
+  useEffect(() => setMoved(null), [selected]);
 
   const patch = (month: string, p: Partial<CardCycle>) =>
     setCycles((cs) => cs.map((c) => (c.month === month ? { ...c, ...p } : c)));
@@ -310,7 +313,20 @@ function CiclosSection() {
           </Pressable>
           {!valid && <Text style={{ color: colors.warn, fontSize: 12 }}>Completá todas las fechas (AAAA-MM-DD).</Text>}
           {save.error && <Text style={{ color: colors.bad }}>{save.error.message}</Text>}
-          <SaveButton pending={save.isPending} onPress={() => valid && selected !== undefined && save.mutate(cycles)} />
+          {moved && (
+            <Text style={{ color: colors.inkMuted, fontSize: 12 }}>
+              {moved.length === 0
+                ? 'Guardado. Ninguna compra cambió de resumen; los vencimientos de las cuotas se actualizaron.'
+                : `Guardado. ${moved.length === 1 ? 'Una compra cambió' : `${moved.length} compras cambiaron`} de resumen por su fecha de compra: ` +
+                  moved.map((m) => `${m.description} (${formatMonth(m.fromMonth)} → ${formatMonth(m.toMonth)})`).join(', ') + '.'}
+            </Text>
+          )}
+          <SaveButton
+            pending={save.isPending}
+            onPress={() =>
+              valid && selected !== undefined && save.mutate(cycles, { onSuccess: (r) => setMoved(r.moved) })
+            }
+          />
         </QueryState>
       </QueryState>
     </Card>

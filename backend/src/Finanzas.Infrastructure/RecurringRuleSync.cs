@@ -32,7 +32,7 @@ public static class RecurringRuleSync
         foreach (var t in RecurringRuleExpander.Expand(rule, method, Horizon(today)))
         {
             if (done.Contains((t.Date.Year, t.Date.Month))) continue;
-            if (method.IsCard && t.FirstDueDate is null) { missing.Add(t.Date); continue; }
+            if (method.IsCard && t.FirstStatementMonth is null) { missing.Add(t.Date); continue; }
             t.Impacts = CashImpactBuilder.Build(t, method, s => boxes[s]);
             db.Transactions.Add(t);
         }

@@ -10,6 +10,7 @@ import type {
   BudgetVsActual,
   CardCycle,
   CardDueDate,
+  CardCyclesSaved,
   CardStatementMonth,
   CardStatementsMonth,
   CashBox,
@@ -210,7 +211,8 @@ export function useCardStatements(q: CardStatementsQuery | undefined) {
 export function useUpdateCardCycles(cardId: Id | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (cycles: CardCycle[]) => api.put<CardCycle[]>(`/cards/${cardId}/cycles`, cycles),
+    // Devuelve también las compras que cambiaron de resumen (el resumen sale de la fecha de compra y los cierres).
+    mutationFn: (cycles: CardCycle[]) => api.put<CardCyclesSaved>(`/cards/${cardId}/cycles`, cycles),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: ['cards', cardId] }),

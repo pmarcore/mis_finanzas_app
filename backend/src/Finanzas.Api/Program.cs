@@ -43,6 +43,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<FinanzasDbContext>();
     db.Database.Migrate();
+    // Deja las compras con tarjeta consistentes con los cierres (resumen por fecha de compra, vencimiento por mes).
+    // Es idempotente: si ya estaba todo bien no cambia nada.
+    foreach (var m in CardStatementSync.RecalculateAsync(db).GetAwaiter().GetResult())
+        app.Logger.LogInformation("Compra {Id} {Description} del {Date}: pasa del resumen {From:yyyy-MM} al {To:yyyy-MM}.",
+            m.TransactionId, m.Description, m.Date, m.FromMonth, m.ToMonth);
+    db.SaveChanges();
     AuthSetup.SyncUsers(db, auth, scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.IPasswordHasher<AppUser>>(),
         app.Logger);
 }
